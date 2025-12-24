@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { mockApi } from '../services/mockApi';
 import { Appointment, AppointmentStatus, Client } from '../types';
 import Badge from '../components/Badge';
-import { Search, Filter, Calendar, Users, Clock, MoreHorizontal, ArrowUpRight, TrendingUp, LayoutList, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, Calendar, Users, Clock, MoreHorizontal, ArrowUpRight, TrendingUp, LayoutList, ChevronLeft, ChevronRight, X, MapPin } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const Appointments: React.FC = () => {
@@ -11,22 +11,30 @@ const Appointments: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [currentDate, setCurrentDate] = useState(new Date());
+  
+  // Drag and Drop State
+  const [draggedAppointment, setDraggedAppointment] = useState<Appointment | null>(null);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+
+  // Day Detail Modal State
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-        const appts = await mockApi.getAppointments();
-        const clients = await mockApi.getClients();
-        
-        const merged = appts.map(a => {
-            const client = clients.find(c => c.id === a.clientId);
-            return { ...a, avatar: client?.avatar };
-        });
-        
-        setAppointments(merged);
-        setLoading(false);
-    };
     fetchData();
   }, []);
+
+  const fetchData = async () => {
+      const appts = await mockApi.getAppointments();
+      const clients = await mockApi.getClients();
+      
+      const merged = appts.map(a => {
+          const client = clients.find(c => c.id === a.clientId);
+          return { ...a, avatar: client?.avatar };
+      });
+      
+      setAppointments(merged);
+      setLoading(false);
+  };
 
   const stats = [
     { label: 'Total Bookings', value: appointments.length, trend: '+12%', color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -78,6 +86,66 @@ const Appointments: React.FC = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   };
 
+  // --- Drag and Drop Handlers ---
+
+  const handleDragStart = (e: React.DragEvent, appt: Appointment) => {
+    setDraggedAppointment(appt);
+    e.dataTransfer.effectAllowed = "move";
+    // Ghost image is handled by browser, but we could set a custom one
+  };
+
+  const handleDragOver = (e: React.DragEvent, dateStr: string) => {
+    e.preventDefault(); // Necessary to allow dropping
+    setDragOverDate(dateStr);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverDate(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetDateStr: string) => {
+    e.preventDefault();
+    setDragOverDate(null);
+    
+    if (!draggedAppointment) return;
+
+    const targetDate = new Date(targetDateStr);
+    const originalStart = new Date(draggedAppointment.startTime);
+    const originalEnd = new Date(draggedAppointment.endTime);
+    
+    // Calculate new start time (preserve time of day, change date)
+    const newStart = new Date(targetDate);
+    newStart.setHours(originalStart.getHours(), originalStart.getMinutes(), 0, 0);
+
+    // Calculate duration to set new end time
+    const durationMs = originalEnd.getTime() - originalStart.getTime();
+    const newEnd = new Date(newStart.getTime() + durationMs);
+
+    // Optimistic Update
+    const updatedList = appointments.map(a => 
+        a.id === draggedAppointment.id 
+        ? { ...a, startTime: newStart.toISOString(), endTime: newEnd.toISOString() } 
+        : a
+    );
+    setAppointments(updatedList);
+    setDraggedAppointment(null);
+
+    try {
+        await mockApi.rescheduleAppointment(
+            draggedAppointment.id, 
+            newStart.toISOString(), 
+            newEnd.toISOString(), 
+            draggedAppointment.classSessionId
+        );
+        // Silent success or toast
+    } catch (err) {
+        console.error("Failed to reschedule", err);
+        fetchData(); // Revert on fail
+    }
+  };
+
+  // --- Render Functions ---
+
   const renderCalendar = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -94,17 +162,30 @@ const Appointments: React.FC = () => {
     
     // Days
     for (let day = 1; day <= daysInMonth; day++) {
-        // Compare dates properly
+        const dateObj = new Date(year, month, day);
+        const dateStr = dateObj.toDateString();
+        const isoDateStr = dateObj.toISOString();
+        
         const dayAppts = appointments.filter(a => {
             const d = new Date(a.startTime);
             return d.getDate() === day && d.getMonth() === month && d.getFullYear() === year;
         });
         
-        const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
+        const isToday = new Date().toDateString() === dateStr;
+        const isDragOver = dragOverDate === dateStr;
 
         days.push(
-            <div key={day} className="bg-white min-h-[120px] border-b border-r border-gray-100 p-2 transition-colors hover:bg-gray-50 group flex flex-col">
-                <div className="flex justify-between items-start mb-2">
+            <div 
+                key={day} 
+                onDragOver={(e) => handleDragOver(e, dateStr)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, dateStr)}
+                onClick={() => setSelectedDay(dateObj)}
+                className={`min-h-[120px] border-b border-r border-gray-100 p-2 transition-all group flex flex-col relative cursor-pointer
+                    ${isDragOver ? 'bg-indigo-50 ring-inset ring-2 ring-indigo-400 z-10' : 'bg-white hover:bg-gray-50'}
+                `}
+            >
+                <div className="flex justify-between items-start mb-2 pointer-events-none">
                     <span className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full ${
                         isToday 
                         ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' 
@@ -118,18 +199,29 @@ const Appointments: React.FC = () => {
                         </span>
                     )}
                 </div>
+                
                 <div className="space-y-1 overflow-y-auto max-h-[80px] custom-scrollbar">
                     {dayAppts.map(appt => (
-                        <div key={appt.id} className={`text-[10px] px-1.5 py-1 rounded-md border truncate font-medium cursor-pointer transition-transform hover:scale-[1.02] ${
-                            appt.status === AppointmentStatus.COMPLETED ? 'bg-green-50 text-green-700 border-green-100' :
-                            appt.status === AppointmentStatus.CANCELLED ? 'bg-red-50 text-red-700 border-red-100' :
-                            'bg-indigo-50 text-indigo-700 border-indigo-100'
-                        }`} title={`${new Date(appt.startTime).toLocaleTimeString()} - ${appt.serviceName}`}>
-                            <span className="opacity-75 mr-1">{new Date(appt.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                            {appt.clientName}
+                        <div 
+                            key={appt.id} 
+                            draggable
+                            onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, appt); }}
+                            onClick={(e) => { e.stopPropagation(); setSelectedDay(dateObj); }}
+                            className={`text-[10px] px-1.5 py-1 rounded-md border truncate font-medium cursor-grab active:cursor-grabbing transition-transform hover:scale-[1.02] shadow-sm flex items-center gap-1 ${
+                                appt.status === AppointmentStatus.COMPLETED ? 'bg-green-50 text-green-700 border-green-100' :
+                                appt.status === AppointmentStatus.CANCELLED ? 'bg-red-50 text-red-700 border-red-100' :
+                                'bg-indigo-50 text-indigo-700 border-indigo-100'
+                            }`} 
+                            title={`${new Date(appt.startTime).toLocaleTimeString()} - ${appt.serviceName}`}
+                        >
+                            <span className="opacity-75 font-mono">{new Date(appt.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                            <span className="truncate">{appt.clientName}</span>
                         </div>
                     ))}
                 </div>
+                
+                {/* Visual Hint for Hover */}
+                <div className="absolute inset-0 bg-indigo-500/0 group-hover:bg-indigo-500/5 transition-colors pointer-events-none"></div>
             </div>
         );
     }
@@ -159,6 +251,11 @@ const Appointments: React.FC = () => {
              {/* Calendar Body */}
              <div className="grid grid-cols-7">
                 {days}
+             </div>
+             <div className="p-2 bg-gray-50 border-t border-gray-100 text-center">
+                 <p className="text-[10px] text-gray-400 italic flex items-center justify-center gap-1">
+                     <TrendingUp size={10} /> Tip: Drag and drop appointments to reschedule them quickly. Click a day for details.
+                 </p>
              </div>
         </div>
     )
@@ -388,7 +485,7 @@ const Appointments: React.FC = () => {
                </div>
            </div>
 
-           {/* Chart 3: Top Services (NEW) */}
+           {/* Chart 3: Top Services */}
            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                 <div className="flex items-center justify-between mb-4">
                      <h3 className="font-bold text-gray-800 text-lg">Top Services</h3>
@@ -413,24 +510,87 @@ const Appointments: React.FC = () => {
                     )}
                 </div>
            </div>
-
-           {/* Peak Hours Card */}
-           <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-xl text-white shadow-lg shadow-indigo-200 p-5">
-             <div className="flex items-start gap-3">
-               <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                 <Clock className="text-white" size={20} />
-               </div>
-               <div>
-                 <p className="text-sm font-bold text-white mb-1">Peak Hours</p>
-                 <p className="text-xs text-indigo-100 leading-relaxed">Saturday afternoon is your busiest time. Consider adding another staff member.</p>
-               </div>
-             </div>
-           </div>
         </div>
       </div>
+      )}
+
+      {/* Day Details Modal */}
+      {selectedDay && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+            <div className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm transition-opacity" onClick={() => setSelectedDay(null)}></div>
+            <div className="relative z-50 w-full max-w-md bg-white shadow-2xl h-full flex flex-col transform transition-transform animate-in slide-in-from-right duration-300">
+                <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-white z-10">
+                    <div>
+                        <h2 className="text-lg font-bold text-gray-900">{selectedDay.toLocaleDateString(undefined, { weekday: 'long' })}</h2>
+                        <p className="text-xs text-gray-500 mt-0.5">{selectedDay.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                    </div>
+                    <button onClick={() => setSelectedDay(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600">
+                        <X size={20} />
+                    </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
+                    <div className="space-y-4">
+                        {appointments.filter(a => {
+                            const d = new Date(a.startTime);
+                            return d.toDateString() === selectedDay.toDateString();
+                        }).sort((a,b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()).length === 0 ? (
+                            <div className="text-center py-12 flex flex-col items-center">
+                                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4 text-gray-300">
+                                    <Calendar size={24} />
+                                </div>
+                                <p className="text-gray-500 font-medium">No appointments for this day.</p>
+                                <p className="text-xs text-gray-400 mt-1">Drag an appointment here to reschedule.</p>
+                            </div>
+                        ) : (
+                            appointments.filter(a => {
+                                const d = new Date(a.startTime);
+                                return d.toDateString() === selectedDay.toDateString();
+                            }).sort((a,b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()).map(appt => (
+                                <div key={appt.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+                                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500"></div>
+                                     <div className="flex justify-between items-start mb-2 pl-2">
+                                         <div>
+                                             <h4 className="font-bold text-gray-900 text-sm">{appt.serviceName}</h4>
+                                             <p className="text-xs text-indigo-600 font-medium flex items-center gap-1 mt-0.5">
+                                                <Clock size={10} /> 
+                                                {new Date(appt.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {new Date(appt.endTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                             </p>
+                                         </div>
+                                         <Badge status={appt.status} />
+                                     </div>
+                                     
+                                     <div className="flex items-center gap-3 mt-3 pl-2 pt-3 border-t border-gray-50">
+                                         <img 
+                                            src={appt.avatar || `https://api.dicebear.com/9.x/avataaars/svg?seed=${appt.clientId}`} 
+                                            alt="" 
+                                            className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200"
+                                         />
+                                         <div>
+                                             <p className="text-xs font-bold text-gray-800">{appt.clientName}</p>
+                                             <p className="text-[10px] text-gray-400 flex items-center gap-1">
+                                                 <Users size={10} /> {appt.providerName}
+                                                 {appt.room && <span className="flex items-center gap-0.5 ml-1"><MapPin size={8} /> {appt.room}</span>}
+                                             </p>
+                                         </div>
+                                     </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+                
+                <div className="p-4 bg-white border-t border-gray-100">
+                    <button onClick={() => setSelectedDay(null)} className="w-full py-3 bg-gray-100 text-gray-700 font-bold text-sm rounded-xl hover:bg-gray-200 transition-colors">
+                        Close Details
+                    </button>
+                </div>
+            </div>
+        </div>
       )}
     </div>
   );
 };
 
 export default Appointments;
+    
