@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { AppointmentStatus } from '../types';
 
@@ -7,31 +8,32 @@ interface BadgeProps {
 }
 
 const Badge: React.FC<BadgeProps> = ({ status, className = '' }) => {
-  let colorClass = 'bg-gray-100 text-gray-800';
+  let colorClass = 'bg-gray-100 text-gray-800 border-gray-200';
 
   switch (status) {
     case AppointmentStatus.BOOKED:
     case 'ACTIVE':
-      colorClass = 'bg-blue-100 text-blue-800';
+      colorClass = 'bg-indigo-50 text-indigo-700 border-indigo-100';
       break;
     case AppointmentStatus.COMPLETED:
-      colorClass = 'bg-green-100 text-green-800';
+      colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-100';
       break;
     case AppointmentStatus.CANCELLED:
     case 'NO_SHOW':
     case AppointmentStatus.NO_SHOW:
-      colorClass = 'bg-red-100 text-red-800';
+      colorClass = 'bg-rose-50 text-rose-700 border-rose-100';
       break;
     case 'NEW':
-      colorClass = 'bg-yellow-100 text-yellow-800';
+      colorClass = 'bg-amber-50 text-amber-700 border-amber-100';
       break;
   }
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass} ${className}`}>
+    <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${colorClass} ${className} transition-all`}>
       {status.replace('_', ' ')}
     </span>
   );
 };
 
 export default Badge;
+    

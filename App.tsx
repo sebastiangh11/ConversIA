@@ -8,6 +8,7 @@ import Inbox from './routes/Inbox';
 import Appointments from './routes/Appointments';
 import Classes from './routes/Classes';
 import Clients from './routes/Clients';
+import Payments from './routes/Payments';
 import Settings from './routes/Settings';
 import Login from './routes/Login';
 import { mockApi } from './services/mockApi';
@@ -83,6 +84,7 @@ const App: React.FC = () => {
               <Route path="/appointments" element={<Appointments />} />
               <Route path="/classes" element={<Classes />} />
               <Route path="/clients" element={<Clients />} />
+              <Route path="/payments" element={<Payments />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

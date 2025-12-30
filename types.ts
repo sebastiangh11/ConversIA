@@ -123,3 +123,25 @@ export interface BusinessSettings {
   concurrentSlots: number; // How many simultaneous appointments (non-class)
   aiPrompt: string; // System instruction for the bot
 }
+
+export interface Transaction {
+  id: string;
+  clientId: string;
+  clientName: string;
+  serviceId: string;
+  serviceName: string;
+  amount: number;
+  currency: string;
+  status: 'PAID' | 'PENDING' | 'REFUNDED';
+  date: string;
+  stripeTransactionId: string;
+  paymentMethod: 'CARD' | 'WALLET' | 'OTHER';
+}
+
+export interface Payout {
+  id: string;
+  amount: number;
+  status: 'COMPLETED' | 'PENDING' | 'SCHEDULED';
+  arrivalDate: string;
+  bankName: string;
+}

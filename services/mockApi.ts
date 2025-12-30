@@ -1,3 +1,4 @@
+
 import { 
   Appointment, 
   AppointmentStatus, 
@@ -7,7 +8,9 @@ import {
   MessageSender, 
   Service,
   BusinessSettings,
-  ClassSession
+  ClassSession,
+  Transaction,
+  Payout
 } from '../types';
 
 // --- HELPERS ---
@@ -239,6 +242,44 @@ createConv('conv4', 'c8', 'Can I reschedule my massage to 4 PM?', 10, 1, 'ACTIVE
 createConv('conv5', 'c12', 'Is the hot yoga class suitable for beginners?', 600, 0, 'ACTIVE', 'a6');
 createConv('conv6', 'c2', 'Sorry I missed my appointment yesterday.', 1440, 0, 'ARCHIVED', 'a_past_5');
 createConv('conv7', 'c9', 'Confirming my haircut later today.', 15, 1, 'ACTIVE', 'a7');
+
+// --- TRANSACTIONS ---
+let TRANSACTIONS: Transaction[] = [];
+
+const createTransaction = (id: string, clientId: string, serviceIdx: number, daysAgo: number, status: 'PAID' | 'PENDING' | 'REFUNDED') => {
+  const client = CLIENTS.find(c => c.id === clientId)!;
+  const service = SERVICES[serviceIdx];
+  const date = new Date(NOW - (daysAgo * DAY_MS)).toISOString();
+  
+  TRANSACTIONS.push({
+    id,
+    clientId,
+    clientName: client.name,
+    serviceId: service.id,
+    serviceName: service.name,
+    amount: service.price,
+    currency: 'USD',
+    status,
+    date,
+    stripeTransactionId: `ch_${Math.random().toString(36).substr(2, 9)}`,
+    paymentMethod: Math.random() > 0.3 ? 'CARD' : (Math.random() > 0.5 ? 'WALLET' : 'OTHER')
+  });
+};
+
+// Generate some transactions
+CLIENTS.forEach((c, idx) => {
+    createTransaction(`t_${idx}_1`, c.id, Math.floor(Math.random() * SERVICES.length), Math.floor(Math.random() * 20), 'PAID');
+    if (idx % 3 === 0) createTransaction(`t_${idx}_2`, c.id, 0, 2, 'PENDING');
+    if (idx % 7 === 0) createTransaction(`t_${idx}_3`, c.id, 4, 15, 'REFUNDED');
+});
+
+// --- PAYOUTS ---
+let PAYOUTS: Payout[] = [
+    { id: 'po_1', amount: 1450.50, status: 'COMPLETED', arrivalDate: new Date(NOW - 5 * DAY_MS).toISOString(), bankName: 'Chase Bank (...4421)' },
+    { id: 'po_2', amount: 890.00, status: 'COMPLETED', arrivalDate: new Date(NOW - 12 * DAY_MS).toISOString(), bankName: 'Chase Bank (...4421)' },
+    { id: 'po_3', amount: 1200.00, status: 'PENDING', arrivalDate: new Date(NOW + 2 * DAY_MS).toISOString(), bankName: 'Chase Bank (...4421)' },
+    { id: 'po_4', amount: 350.25, status: 'SCHEDULED', arrivalDate: new Date(NOW + 5 * DAY_MS).toISOString(), bankName: 'Chase Bank (...4421)' },
+];
 
 // --- SETTINGS ---
 
@@ -497,6 +538,18 @@ export const mockApi = {
     };
     CLASS_SESSIONS.push(newSession);
     return newSession;
+  },
+
+  // --- PAYMENTS ---
+
+  getTransactions: async (): Promise<Transaction[]> => {
+    await delay(400);
+    return [...TRANSACTIONS].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  },
+
+  getPayouts: async (): Promise<Payout[]> => {
+    await delay(300);
+    return [...PAYOUTS].sort((a, b) => new Date(b.arrivalDate).getTime() - new Date(a.arrivalDate).getTime());
   },
 
   // --- SETTINGS ---

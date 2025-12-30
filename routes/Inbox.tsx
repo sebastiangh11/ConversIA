@@ -1,12 +1,32 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { mockApi } from '../services/mockApi';
 import { Conversation, Message, Appointment, AppointmentStatus, MessageSender, Client } from '../types';
 import Badge from '../components/Badge';
 import BookingModal from '../components/BookingModal';
 import RescheduleModal from '../components/RescheduleModal';
-import { Search, Send, MoreVertical, Calendar, Clock, User, XCircle, CheckCircle, AlertCircle, MessageSquare, MapPin, RefreshCw, Plus, FileText, Phone, Mail, Tag, Save, History, ChevronRight, PanelRight } from 'lucide-react';
+import { Search, Send, MoreVertical, Calendar, Clock, User, XCircle, CheckCircle, AlertCircle, MessageSquare, MapPin, RefreshCw, Plus, FileText, Phone, Mail, Tag, Save, History, ChevronRight, PanelRight, X } from 'lucide-react';
+
+const HighlightText = ({ text, highlight }: { text: string; highlight: string }) => {
+  if (!highlight.trim()) return <span>{text}</span>;
+  try {
+    const regex = new RegExp(`(${highlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const parts = text.split(regex);
+    return (
+      <span>
+        {parts.map((part, i) => 
+          regex.test(part) ? (
+            <mark key={i} className="bg-yellow-200 text-gray-900 rounded-sm px-0.5">{part}</mark>
+          ) : (
+            part
+          )
+        )}
+      </span>
+    );
+  } catch (e) {
+    return <span>{text}</span>;
+  }
+};
 
 const Inbox: React.FC = () => {
   const [conversations, setConversations] = useState<(Conversation & { avatar?: string })[]>([]);
@@ -20,6 +40,10 @@ const Inbox: React.FC = () => {
   const [noteDraft, setNoteDraft] = useState('');
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isCrmOpen, setIsCrmOpen] = useState(true);
+
+  // Message Search State
+  const [msgSearchTerm, setMsgSearchTerm] = useState('');
+  const [isSearchingMessages, setIsSearchingMessages] = useState(false);
 
   // Modals
   const [activeAppointmentForAction, setActiveAppointmentForAction] = useState<Appointment | null>(null);
@@ -44,12 +68,17 @@ const Inbox: React.FC = () => {
       if (conv) {
          loadClientContext(conv.clientId);
       }
+      // Reset search when switching conversations
+      setMsgSearchTerm('');
+      setIsSearchingMessages(false);
     }
   }, [selectedConvId, conversations]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (!isSearchingMessages) {
+      scrollToBottom();
+    }
+  }, [messages, isSearchingMessages]);
 
   const loadConversations = async () => {
     const data = await mockApi.getConversations();
@@ -231,22 +260,53 @@ const Inbox: React.FC = () => {
           <div className="flex-1 flex flex-col h-full relative bg-white md:rounded-l-2xl shadow-xl z-0 overflow-hidden border-r border-gray-200">
             {/* Chat Header */}
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-white shadow-sm z-10 h-16">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 overflow-hidden flex-1">
                 <img 
                     src={selectedConversation.avatar || `https://api.dicebear.com/9.x/avataaars/svg?seed=${selectedConversation.clientId}`} 
                     alt="Avatar" 
-                    className="w-9 h-9 rounded-full border border-gray-100"
+                    className="w-9 h-9 rounded-full border border-gray-100 flex-shrink-0"
                 />
-                <div>
-                  <h3 className="font-bold text-gray-900 text-sm">{selectedConversation.clientName}</h3>
-                  <p className="text-[10px] text-indigo-500 flex items-center gap-1 font-medium">
-                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-                    WhatsApp Active
-                  </p>
-                </div>
+                {!isSearchingMessages ? (
+                  <div className="truncate">
+                    <h3 className="font-bold text-gray-900 text-sm truncate">{selectedConversation.clientName}</h3>
+                    <p className="text-[10px] text-indigo-500 flex items-center gap-1 font-medium">
+                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                      WhatsApp Active
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 flex-1 animate-in fade-in slide-in-from-right-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                      <input 
+                        autoFocus
+                        type="text"
+                        value={msgSearchTerm}
+                        onChange={(e) => setMsgSearchTerm(e.target.value)}
+                        placeholder="Search in conversation..."
+                        className="w-full pl-9 pr-3 py-1.5 bg-gray-50 border-none rounded-lg text-xs focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                      />
+                    </div>
+                    <button 
+                      onClick={() => { setIsSearchingMessages(false); setMsgSearchTerm(''); }}
+                      className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                )}
               </div>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 ml-2">
+                {!isSearchingMessages && (
+                  <button 
+                    onClick={() => setIsSearchingMessages(true)}
+                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+                    title="Search messages"
+                  >
+                    <Search size={18} />
+                  </button>
+                )}
                 <button 
                   onClick={() => setIsCrmOpen(!isCrmOpen)}
                   className={`p-2 rounded-full transition-colors ${isCrmOpen ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
@@ -265,27 +325,40 @@ const Inbox: React.FC = () => {
               {isLoading ? (
                 <div className="flex justify-center p-4"><span className="text-gray-400 text-sm">Loading chat...</span></div>
               ) : (
-                messages.map((msg) => (
-                  <div key={msg.id} className={`flex ${msg.sender === MessageSender.CLIENT ? 'justify-start' : (msg.sender === MessageSender.SYSTEM ? 'justify-center' : 'justify-end')}`}>
-                    {msg.sender === MessageSender.SYSTEM ? (
-                      <div className="bg-gray-100 border border-gray-200 text-gray-500 text-[10px] px-3 py-1 rounded-full my-2 font-medium uppercase tracking-wide">
-                        {msg.text}
-                      </div>
-                    ) : (
-                      <div className={`max-w-[75%] p-3 rounded-2xl shadow-sm text-sm relative group ${
-                        msg.sender === MessageSender.BUSINESS 
-                          ? 'bg-indigo-600 text-white rounded-tr-none' 
-                          : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'
-                      }`}>
-                        <p className="leading-relaxed">{msg.text}</p>
-                        <span className={`text-[9px] block text-right mt-1.5 opacity-70 ${msg.sender === MessageSender.BUSINESS ? 'text-indigo-100' : 'text-gray-400'}`}>
-                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          {msg.sender === MessageSender.BUSINESS && ' • ✓✓'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))
+                messages.map((msg) => {
+                  const isVisible = !msgSearchTerm || msg.text.toLowerCase().includes(msgSearchTerm.toLowerCase());
+                  if (!isVisible && msg.sender !== MessageSender.SYSTEM) return null;
+
+                  return (
+                    <div key={msg.id} className={`flex ${msg.sender === MessageSender.CLIENT ? 'justify-start' : (msg.sender === MessageSender.SYSTEM ? 'justify-center' : 'justify-end')}`}>
+                      {msg.sender === MessageSender.SYSTEM ? (
+                        <div className="bg-gray-100 border border-gray-200 text-gray-500 text-[10px] px-3 py-1 rounded-full my-2 font-medium uppercase tracking-wide">
+                          {msg.text}
+                        </div>
+                      ) : (
+                        <div className={`max-w-[75%] p-3 rounded-2xl shadow-sm text-sm relative group animate-in zoom-in-95 ${
+                          msg.sender === MessageSender.BUSINESS 
+                            ? 'bg-indigo-600 text-white rounded-tr-none' 
+                            : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'
+                        }`}>
+                          <p className="leading-relaxed">
+                            <HighlightText text={msg.text} highlight={msgSearchTerm} />
+                          </p>
+                          <span className={`text-[9px] block text-right mt-1.5 opacity-70 ${msg.sender === MessageSender.BUSINESS ? 'text-indigo-100' : 'text-gray-400'}`}>
+                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {msg.sender === MessageSender.BUSINESS && ' • ✓✓'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+              {messages.filter(m => msgSearchTerm && m.sender !== MessageSender.SYSTEM && m.text.toLowerCase().includes(msgSearchTerm.toLowerCase())).length === 0 && msgSearchTerm && (
+                <div className="flex flex-col items-center justify-center h-full py-12 text-gray-400">
+                  <Search size={40} className="mb-3 opacity-20" />
+                  <p className="text-sm font-medium">No messages match your search.</p>
+                </div>
               )}
               <div ref={messagesEndRef} />
             </div>
