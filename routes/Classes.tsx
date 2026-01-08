@@ -1,791 +1,457 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { mockApi } from '../services/mockApi';
-import { ClassSession, Service, Appointment, BusinessSettings } from '../types';
+import { Specialty, Service, Provider } from '../types';
 import { 
-  Calendar, Clock, MapPin, Users, Plus, X, Search, MoreVertical, 
-  Scissors, Dumbbell, Sun, HeartPulse, Zap, LayoutDashboard, CalendarPlus, 
-  CheckCircle2, AlertCircle, ChevronRight, ChevronLeft, UserPlus, Layers, ArrowRight 
+  Plus, Stethoscope, Users, Clock, 
+  ChevronRight, X, UserPlus, ShieldCheck, 
+  Building2, Trash2, Edit3, Check, AlertCircle, Search,
+  Activity, Briefcase, Settings2, ShieldAlert, FileText,
+  DollarSign, MessageSquare, Shield, Zap, TrendingUp, Filter,
+  MoreHorizontal, UserCheck, Smartphone, CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
+import ProviderProfileDrawer from '../components/ProviderProfileDrawer';
 
-const Classes: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'status' | 'create'>('status');
-  const [sessions, setSessions] = useState<ClassSession[]>([]);
+type ViewTab = 'DEPARTMENTS' | 'ROSTER';
+
+const Specialties: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<ViewTab>('DEPARTMENTS');
+  const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [services, setServices] = useState<Service[]>([]);
-  const [providers, setProviders] = useState<string[]>([]);
-  const [settings, setSettings] = useState<BusinessSettings | null>(null);
-  
-  // Drawer state for viewing attendees
-  const [selectedSession, setSelectedSession] = useState<ClassSession | null>(null);
-  const [attendees, setAttendees] = useState<(Appointment & {avatar?: string})[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Create Form State
-  // Initialize with Today's date
-  const [newSessionService, setNewSessionService] = useState('');
-  const [newSessionDate, setNewSessionDate] = useState(new Date().toISOString().split('T')[0]);
-  const [newSessionTime, setNewSessionTime] = useState('');
-  const [newSessionEndTime, setNewSessionEndTime] = useState('');
-  const [newSessionRoom, setNewSessionRoom] = useState('Room A');
-  const [newSessionProvider, setNewSessionProvider] = useState('');
-  const [newSessionDescription, setNewSessionDescription] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Selection & Management
+  const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>([]);
+  const [profileProviderId, setProfileProviderId] = useState<string | null>(null);
+  const [isAddingStaff, setIsAddingStaff] = useState(false);
+  const [newStaffName, setNewStaffName] = useState('');
+  const [newStaffRole, setNewStaffRole] = useState<'DOCTOR' | 'NURSE'>('DOCTOR');
+  const [managedSpecialty, setManagedSpecialty] = useState<Specialty | null>(null);
+  const [isAddingSpecialty, setIsAddingSpecialty] = useState(false);
+  const [specialtyFormData, setSpecialtyFormData] = useState({ name: '', description: '' });
 
-  // Calendar Widget State
-  const [calendarViewDate, setCalendarViewDate] = useState(new Date());
-
-  // New Entity Creation State
-  const [isCreatingService, setIsCreatingService] = useState(false);
-  const [newServiceName, setNewServiceName] = useState('');
-  const [newServiceDuration, setNewServiceDuration] = useState(60);
-  const [newServiceCapacity, setNewServiceCapacity] = useState(10);
-
-  const [isCreatingProvider, setIsCreatingProvider] = useState(false);
-  const [newProviderNameInput, setNewProviderNameInput] = useState('');
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  // Helper to add minutes to a time string "HH:MM"
-  const addMinutesToTime = (time: string, minutes: number): string => {
-    if (!time) return '';
-    const [h, m] = time.split(':').map(Number);
-    const date = new Date();
-    date.setHours(h, m, 0, 0);
-    date.setMinutes(date.getMinutes() + minutes);
-    return date.toTimeString().slice(0, 5);
-  };
-
-  // Helper to calculate difference in minutes between two time strings
-  const getDurationFromTimes = (start: string, end: string): number => {
-    if (!start || !end) return 0;
-    const [h1, m1] = start.split(':').map(Number);
-    const [h2, m2] = end.split(':').map(Number);
-    const d1 = new Date(); d1.setHours(h1, m1, 0, 0);
-    const d2 = new Date(); d2.setHours(h2, m2, 0, 0);
-    
-    let diffMs = d2.getTime() - d1.getTime();
-    if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000; // Handle overnight edge case simply
-    return Math.floor(diffMs / 60000);
-  };
-
-  // Auto-update End Time when Service or Start Time changes
-  useEffect(() => {
-    if (newSessionTime) {
-        let duration = 60;
-        if (isCreatingService) {
-            duration = newServiceDuration || 60;
-        } else if (newSessionService) {
-            const s = services.find(x => x.id === newSessionService);
-            if (s) duration = s.durationMinutes;
-        }
-        
-        // Only auto-update if end time is empty or we just switched services/time
-        setNewSessionEndTime(addMinutesToTime(newSessionTime, duration));
-    }
-  }, [newSessionTime, newSessionService, isCreatingService, services, newServiceDuration]);
-
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
-    const s = await mockApi.getClassSessions();
-    const sv = await mockApi.getServices();
-    const p = await mockApi.getProviders();
-    const sett = await mockApi.getSettings();
-    setSessions(s);
-    setServices(sv.filter(service => service.isClass));
-    setProviders(p);
-    setSettings(sett);
+    setIsLoading(true);
+    const [specData, svcData, provData] = await Promise.all([
+      mockApi.getSpecialties(),
+      mockApi.getServices(),
+      mockApi.getProviders()
+    ]);
+    setSpecialties(specData);
+    setServices(svcData);
+    setProviders(provData);
+    setIsLoading(false);
   };
 
-  const handleCreateSession = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    if (!settings) {
-        alert("Business settings are not loaded yet. Please try again.");
-        setIsSubmitting(false);
-        return;
-    }
-
-    // --- VALIDATION: Working Hours & Holidays ---
-    // 1. Check for Holidays/Days Off
-    const holiday = settings.daysOff?.find(d => d.date === newSessionDate);
-    if (holiday) {
-        alert(`Cannot schedule: Business is closed on ${new Date(newSessionDate).toLocaleDateString()} for "${holiday.description}".`);
-        setIsSubmitting(false);
-        return;
-    }
-
-    // 2. Check Working Hours
-    const [y, m, d] = newSessionDate.split('-').map(Number);
-    // Create date object in local time
-    const dateObj = new Date(y, m - 1, d);
-    
-    // Robust day name map (0=Sunday to 6=Saturday)
-    const daysMap: (keyof BusinessSettings['workingHours'])[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const dayName = daysMap[dateObj.getDay()];
-    const dayConfig = settings.workingHours[dayName];
-
-    if (!dayConfig.isOpen) {
-        const dayStr = String(dayName);
-        alert(`Cannot schedule: Business is closed on ${dayStr.charAt(0).toUpperCase() + dayStr.slice(1)}s.`);
-        setIsSubmitting(false);
-        return;
-    }
-
-    // Check against first shift
-    const isWithinFirstShift = newSessionTime >= dayConfig.open && newSessionEndTime <= dayConfig.close;
-    
-    // Check against second shift (if enabled)
-    let isWithinSecondShift = false;
-    if (dayConfig.isSplit && dayConfig.open2 && dayConfig.close2) {
-        isWithinSecondShift = newSessionTime >= dayConfig.open2 && newSessionEndTime <= dayConfig.close2;
-    }
-
-    if (!isWithinFirstShift && !isWithinSecondShift) {
-            let msg = `Cannot schedule: Session time (${newSessionTime} - ${newSessionEndTime}) must be within business hours.`;
-            msg += `\nHours: ${dayConfig.open} - ${dayConfig.close}`;
-            if (dayConfig.isSplit && dayConfig.open2 && dayConfig.close2) {
-                msg += ` or ${dayConfig.open2} - ${dayConfig.close2}`;
-            }
-            alert(msg);
-            setIsSubmitting(false);
-            return;
-    }
-    // ---------------------------------------------
-
-    let serviceIdToUse = newSessionService;
-    let serviceNameToUse = '';
-    // Calculate duration based on the manually entered start/end times
-    let durationToUse = getDurationFromTimes(newSessionTime, newSessionEndTime);
-    let capacityToUse = 10;
-    let providerToUse = newSessionProvider;
-
-    // 1. Handle New Service Creation
-    if (isCreatingService) {
-        if (!newServiceName) {
-            alert('Please enter a service name');
-            setIsSubmitting(false);
-            return;
-        }
-        const createdService = await mockApi.createService({
-            name: newServiceName,
-            durationMinutes: durationToUse || newServiceDuration, // Fallback
-            capacity: newServiceCapacity,
-            isClass: true,
-            price: 20 // Default price
-        });
-        serviceIdToUse = createdService.id;
-        serviceNameToUse = createdService.name;
-        capacityToUse = createdService.capacity || 10;
-    } else {
-        const service = services.find(s => s.id === newSessionService);
-        if (!service) {
-            setIsSubmitting(false);
-            return;
-        }
-        serviceNameToUse = service.name;
-        capacityToUse = service.capacity || 10;
-    }
-
-    // 2. Handle New Provider Creation
-    if (isCreatingProvider) {
-        if (!newProviderNameInput) {
-            alert('Please enter a provider name');
-            setIsSubmitting(false);
-            return;
-        }
-        providerToUse = await mockApi.addProvider(newProviderNameInput);
-    }
-
-    // 3. Create the Session
-    const startDateTime = new Date(`${newSessionDate}T${newSessionTime}`);
-    
-    await mockApi.createClassSession({
-      serviceId: serviceIdToUse,
-      serviceName: serviceNameToUse,
-      startTime: startDateTime.toISOString(),
-      durationMinutes: durationToUse,
-      providerName: providerToUse,
-      room: newSessionRoom,
-      maxCapacity: capacityToUse,
-      description: newSessionDescription
-    });
-
-    setIsSubmitting(false);
-    
-    // Reset Everything
-    setNewSessionDescription('');
-    setNewSessionDate(new Date().toISOString().split('T')[0]);
-    setNewSessionTime('');
-    setNewSessionEndTime('');
-    
-    // Reset New Entity States
-    setIsCreatingService(false);
-    setNewServiceName('');
-    setIsCreatingProvider(false);
-    setNewProviderNameInput('');
-    setNewSessionProvider('');
-    setNewSessionService('');
-
-    setActiveTab('status'); // Switch back to dashboard
-    loadData(); // Refresh list
+  const handleCreateStaff = async () => {
+    if (!newStaffName.trim()) return;
+    const newProv = await mockApi.createProvider({ name: newStaffName, role: newStaffRole });
+    setProviders(prev => [...prev, newProv]);
+    setNewStaffName('');
+    setIsAddingStaff(false);
   };
 
-  const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const val = e.target.value;
-      if (val === '__NEW__') {
-          setIsCreatingProvider(true);
-          setNewSessionProvider('');
-      } else {
-          setIsCreatingProvider(false);
-          setNewSessionProvider(val);
+  const handleCreateSpecialty = async () => {
+    if (!specialtyFormData.name.trim()) return;
+    const newSpec = { id: `spec${Date.now()}`, name: specialtyFormData.name, description: specialtyFormData.description };
+    setSpecialties(prev => [...prev, newSpec]);
+    setIsAddingSpecialty(false);
+  };
+
+  const toggleProviderSelection = (id: string) => {
+    setSelectedProviderIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+  };
+
+  const getOperationalStats = (specId: string) => {
+      const specSvcs = services.filter(s => s.specialtyId === specId);
+      const uniqueProvIds = new Set(specSvcs.flatMap(s => s.providerIds));
+      const specProvs = providers.filter(p => uniqueProvIds.has(p.id));
+      const activeProvs = specProvs.filter(p => p.status !== 'OFF_DUTY').length;
+      const avgUtil = specProvs.length > 0 ? Math.round(specProvs.reduce((acc, p) => acc + p.utilization, 0) / specProvs.length) : 0;
+      
+      return { 
+        serviceCount: specSvcs.length, 
+        staffCount: uniqueProvIds.size,
+        activeStaff: activeProvs,
+        utilization: avgUtil
+      };
+  };
+
+  const getUtilizationColor = (val: number) => {
+      if (val > 90) return 'bg-rose-500';
+      if (val > 70) return 'bg-amber-500';
+      return 'bg-emerald-500';
+  };
+
+  const getStatusBadge = (status: Provider['status']) => {
+      switch(status) {
+          case 'AVAILABLE': return <span className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-emerald-100"><Zap size={10} /> Live</span>;
+          case 'IN_CONSULT': return <span className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-blue-100"><Activity size={10} /> In Session</span>;
+          case 'ON_BREAK': return <span className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-amber-100"><Clock size={10} /> Break</span>;
+          default: return <span className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 text-gray-400 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-gray-100">Off-duty</span>;
       }
   };
 
-  const handleSessionClick = async (session: ClassSession) => {
-    setSelectedSession(session);
-    // Fetch appointments for this session
-    const allAppts = await mockApi.getAppointments();
-    const clients = await mockApi.getClients();
-    
-    const sessionAttendees = allAppts
-        .filter(a => a.classSessionId === session.id)
-        .map(a => ({
-            ...a,
-            avatar: clients.find(c => c.id === a.clientId)?.avatar
-        }));
-
-    setAttendees(sessionAttendees);
-  };
-
-  const getServiceIcon = (name: string) => {
-    const n = name.toLowerCase();
-    if (n.includes('hair') || n.includes('cut') || n.includes('trim')) return <Scissors size={20} />;
-    if (n.includes('yoga') || n.includes('meditation')) return <Sun size={20} />;
-    if (n.includes('crossfit') || n.includes('gym') || n.includes('fit')) return <Dumbbell size={20} />;
-    if (n.includes('medical') || n.includes('consult')) return <HeartPulse size={20} />;
-    if (n.includes('spin') || n.includes('cycle')) return <Zap size={20} />;
-    return <Calendar size={20} />;
-  };
-
-  const getServiceColor = (name: string) => {
-    const n = name.toLowerCase();
-    if (n.includes('yoga')) return 'bg-orange-100 text-orange-600';
-    if (n.includes('crossfit')) return 'bg-zinc-100 text-zinc-700';
-    if (n.includes('hair')) return 'bg-blue-100 text-blue-600';
-    return 'bg-indigo-100 text-indigo-600';
-  };
-
-  // Calendar Helpers
-  const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-  
-  const handlePrevMonth = () => {
-      setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1));
-  };
-  const handleNextMonth = () => {
-      setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1));
-  };
-  const handleDateSelect = (day: number) => {
-      const year = calendarViewDate.getFullYear();
-      const month = String(calendarViewDate.getMonth() + 1).padStart(2, '0');
-      const d = String(day).padStart(2, '0');
-      setNewSessionDate(`${year}-${month}-${d}`);
-  };
-
-  const renderCalendar = () => {
-      const daysInMonth = getDaysInMonth(calendarViewDate);
-      const firstDay = getFirstDayOfMonth(calendarViewDate);
-      const days = [];
-      const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-      // Empty slots for prev month
-      for (let i = 0; i < firstDay; i++) {
-          days.push(<div key={`empty-${i}`} className="h-8 w-8"></div>);
-      }
-
-      // Days
-      for (let i = 1; i <= daysInMonth; i++) {
-          const currentString = `${calendarViewDate.getFullYear()}-${String(calendarViewDate.getMonth() + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-          const isSelected = newSessionDate === currentString;
-          const isToday = new Date().toISOString().split('T')[0] === currentString;
-          
-          // Check for holidays to style date
-          const isHoliday = settings?.daysOff?.some(d => d.date === currentString);
-
-          days.push(
-              <button
-                  key={i}
-                  type="button"
-                  onClick={() => handleDateSelect(i)}
-                  className={`h-8 w-8 rounded-full text-xs font-medium flex items-center justify-center transition-all ${
-                      isSelected 
-                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' 
-                        : isHoliday
-                            ? 'bg-red-50 text-red-300 line-through cursor-not-allowed'
-                            : isToday 
-                                ? 'bg-indigo-50 text-indigo-600 font-bold border border-indigo-200'
-                                : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-              >
-                  {i}
-              </button>
-          );
-      }
-
-      return (
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center justify-between mb-4">
-                  <button type="button" onClick={handlePrevMonth} className="p-1 hover:bg-gray-100 rounded-full text-gray-500"><ChevronLeft size={16}/></button>
-                  <span className="text-sm font-bold text-gray-800">{monthNames[calendarViewDate.getMonth()]} {calendarViewDate.getFullYear()}</span>
-                  <button type="button" onClick={handleNextMonth} className="p-1 hover:bg-gray-100 rounded-full text-gray-500"><ChevronRight size={16}/></button>
-              </div>
-              <div className="grid grid-cols-7 gap-1 text-center mb-2">
-                  {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-                      <span key={d} className="text-[10px] font-bold text-gray-400 uppercase">{d}</span>
-                  ))}
-              </div>
-              <div className="grid grid-cols-7 gap-1 place-items-center">
-                  {days}
-              </div>
-          </div>
-      );
-  };
+  if (isLoading) return (
+    <div className="flex items-center justify-center h-full gap-3 text-gray-400">
+        <Activity className="animate-pulse" />
+        <span className="text-[10px] font-black uppercase tracking-widest">Syncing Resource Governance...</span>
+    </div>
+  );
 
   return (
-    <div className="p-8 max-w-7xl mx-auto h-[calc(100vh-4rem)] overflow-y-auto relative bg-gray-50/50">
+    <div className="p-8 max-w-7xl mx-auto h-[calc(100vh-4rem)] overflow-y-auto bg-gray-50/30 custom-scrollbar relative">
       
-      {/* Header & Tabs */}
-      <div className="mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <div>
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Class Sessions</h1>
-            <p className="text-sm text-gray-500 mt-1">Manage yoga classes, workshops, and multi-client slots.</p>
-            </div>
-            
-            <div className="bg-white p-1 rounded-xl shadow-sm border border-gray-200 inline-flex">
-                <button 
-                    onClick={() => setActiveTab('status')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'status' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}
-                >
-                    <LayoutDashboard size={18} /> Class Dashboard
-                </button>
-                <button 
-                    onClick={() => setActiveTab('create')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'create' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}
-                >
-                    <CalendarPlus size={18} /> Schedule Creator
-                </button>
-            </div>
+      {/* Governance Header */}
+      <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-6 mb-10">
+        <div>
+          <div className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">
+             <ShieldCheck size={12} /> Resource Governance
+          </div>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Clinical Workforce</h1>
+          <p className="text-sm text-gray-500 font-medium mt-1">Monitor staff utilization, operational readiness, and specialty coverage.</p>
+        </div>
+        
+        <div className="bg-white p-1.5 rounded-2xl shadow-sm border border-gray-100 flex gap-1">
+            <button onClick={() => setActiveTab('DEPARTMENTS')}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'DEPARTMENTS' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-gray-400 hover:text-indigo-600'}`}
+            >
+                <Building2 size={16} /> Specialties
+            </button>
+            <button onClick={() => setActiveTab('ROSTER')}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'ROSTER' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-gray-400 hover:text-indigo-600'}`}
+            >
+                <Users size={16} /> Roster Control
+            </button>
         </div>
       </div>
 
-      {/* SECTION ONE: CURRENT STATUS */}
-      {activeTab === 'status' && (
-        <div className="space-y-8 animate-in fade-in duration-300">
-            {/* KPI Row (Mock) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
-                    <div>
-                        <p className="text-xs text-gray-400 font-bold uppercase">Active Sessions</p>
-                        <p className="text-2xl font-bold text-gray-900">{sessions.length}</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
-                        <Calendar size={20} />
-                    </div>
-                </div>
-                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
-                     <div>
-                        <p className="text-xs text-gray-400 font-bold uppercase">Total Attendees</p>
-                        <p className="text-2xl font-bold text-gray-900">{sessions.reduce((acc, s) => acc + s.currentAttendees, 0)}</p>
-                    </div>
-                     <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                        <Users size={20} />
-                    </div>
-                </div>
-                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
-                     <div>
-                        <p className="text-xs text-gray-400 font-bold uppercase">Avg. Occupancy</p>
-                        <p className="text-2xl font-bold text-gray-900">72%</p>
-                    </div>
-                     <div className="w-10 h-10 rounded-full bg-green-50 text-green-600 flex items-center justify-center">
-                        <CheckCircle2 size={20} />
-                    </div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {sessions.map(session => {
-                const occupancy = session.currentAttendees / session.maxCapacity;
-                let barColor = 'bg-green-500';
-                if (occupancy > 0.6) barColor = 'bg-yellow-500';
-                if (occupancy >= 0.9) barColor = 'bg-red-500';
-
+      {activeTab === 'DEPARTMENTS' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
+            {specialties.map(spec => {
+                const stats = getOperationalStats(spec.id);
                 return (
-                    <div 
-                    key={session.id}
-                    onClick={() => handleSessionClick(session)}
-                    className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer relative overflow-hidden group"
-                    >
-                    <div className="flex justify-between items-start mb-6 relative">
-                        <div className="flex gap-4">
-                             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${getServiceColor(session.serviceName)} shadow-sm`}>
-                                {getServiceIcon(session.serviceName)}
-                             </div>
-                             <div>
-                                <h3 className="font-bold text-gray-900 text-lg leading-tight">{session.serviceName}</h3>
-                                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                                    <Clock size={12} />
-                                    {new Date(session.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                </p>
-                             </div>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 text-xs font-medium text-gray-500 mb-6 bg-gray-50 p-3 rounded-xl border border-gray-100">
-                        <div className="flex items-center gap-2">
-                             <div className="w-6 h-6 rounded-full bg-white border border-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600">
-                                {session.providerName.charAt(0)}
+                    <div key={spec.id} className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group relative overflow-hidden">
+                        <div className="flex justify-between items-start mb-8">
+                            <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                <Stethoscope size={28} />
                             </div>
-                            <span>{session.providerName}</span>
+                            <div className="flex flex-col items-end gap-2">
+                                <span className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-tighter ${stats.activeStaff > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                    {stats.activeStaff === 0 ? 'Coverage Gap' : `${stats.activeStaff} On-duty`}
+                                </span>
+                            </div>
                         </div>
-                        <span className="w-px h-4 bg-gray-200"></span>
-                        <div className="flex items-center gap-1.5">
-                             <MapPin size={14} className="text-gray-400"/> {session.room}
-                        </div>
-                    </div>
 
-                    <div className="space-y-2 relative">
-                        <div className="flex justify-between text-xs font-bold uppercase tracking-wide">
-                        <span className="text-gray-400">Capacity</span>
-                        <span className={`${occupancy === 1 ? 'text-red-500' : 'text-gray-600'}`}>
-                            {session.currentAttendees} / {session.maxCapacity} Booked
-                        </span>
+                        <h3 className="text-xl font-black text-gray-900 mb-2">{spec.name}</h3>
+                        
+                        <div className="space-y-4 pt-6 mt-6 border-t border-gray-50">
+                            <div className="flex justify-between items-end">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Aggregate Load</span>
+                                <span className={`text-[10px] font-black uppercase ${stats.utilization > 80 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                    {stats.utilization}% Utilization
+                                </span>
+                            </div>
+                            <div className="w-full h-1.5 bg-gray-50 rounded-full overflow-hidden">
+                                <div 
+                                    className={`h-full rounded-full transition-all duration-1000 ${getUtilizationColor(stats.utilization)}`}
+                                    style={{ width: `${stats.utilization}%` }}
+                                />
+                            </div>
                         </div>
-                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                        <div 
-                            className={`h-full rounded-full ${barColor} transition-all duration-500`} 
-                            style={{width: `${occupancy * 100}%`}}
-                        ></div>
+
+                        <div className="grid grid-cols-2 gap-4 mt-8">
+                            <div className="p-3 bg-gray-50 rounded-2xl">
+                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Catalog</p>
+                                <p className="text-sm font-black text-gray-800">{stats.serviceCount} items</p>
+                            </div>
+                            <div className="p-3 bg-gray-50 rounded-2xl">
+                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Assigned</p>
+                                <p className="text-sm font-black text-gray-800">{stats.staffCount} providers</p>
+                            </div>
                         </div>
-                    </div>
+
+                        <button 
+                          onClick={() => setManagedSpecialty(spec)}
+                          className="w-full mt-8 py-3 bg-indigo-50 text-indigo-600 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2 border border-indigo-100"
+                        >
+                           Configure Department <ChevronRight size={14} />
+                        </button>
                     </div>
                 );
-                })}
-            </div>
+            })}
+            <button onClick={() => setIsAddingSpecialty(true)} className="border-2 border-dashed border-gray-200 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 p-8 text-gray-400 hover:border-indigo-300 hover:bg-indigo-50/30 hover:text-indigo-600 transition-all group">
+                <div className="w-12 h-12 rounded-full border-2 border-current flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Plus size={24} />
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest">New Specialty Unit</span>
+            </button>
         </div>
       )}
 
-      {/* SECTION TWO: SCHEDULE CREATOR */}
-      {activeTab === 'create' && (
-        <div className="flex flex-col lg:flex-row gap-8 animate-in slide-in-from-right-4 duration-300">
-            
-            {/* Form Section */}
-            <div className="flex-1 bg-white border border-gray-100 rounded-2xl shadow-sm p-8">
-                <div className="mb-6 border-b border-gray-100 pb-4">
-                    <h2 className="text-xl font-bold text-gray-900">Configure New Session</h2>
-                    <p className="text-sm text-gray-500 mt-1">Set up time, instructor, and capacity details.</p>
+      {activeTab === 'ROSTER' && (
+          <div className="animate-in fade-in duration-300 space-y-8">
+              {/* Roster Control Panel */}
+              <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
+                  <div className="flex items-center gap-6 w-full md:w-auto">
+                      <div className="relative group flex-1 md:w-80">
+                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                          <input 
+                            type="text" 
+                            placeholder="Search roster by name, role or skill..." 
+                            className="w-full pl-12 pr-6 py-3 bg-gray-50 border border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:border-indigo-100 outline-none transition-all shadow-inner"
+                          />
+                      </div>
+                      <div className="h-8 w-px bg-gray-100 hidden md:block" />
+                      <div className="flex gap-2">
+                          <button className="p-3 bg-gray-50 text-gray-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                              <Filter size={20} />
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 w-full md:w-auto">
+                      {selectedProviderIds.length > 0 && (
+                          <div className="flex items-center gap-3 mr-4 animate-in slide-in-from-right-2">
+                             <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-2 rounded-xl border border-indigo-100">
+                                {selectedProviderIds.length} Selected
+                             </span>
+                             <button className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">
+                                <Zap size={14} /> Bulk Handover
+                             </button>
+                          </div>
+                      )}
+                      <button onClick={() => setIsAddingStaff(true)} className="flex items-center gap-3 px-8 py-3 bg-white border-2 border-indigo-600 text-indigo-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all active:scale-95">
+                        <UserPlus size={18} /> Register Personnel
+                      </button>
+                  </div>
+              </div>
+
+              {/* Personnel Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {providers.map(prov => {
+                      const isNearExpiry = new Date(prov.licenseExpiry) < new Date(new Date().setMonth(new Date().getMonth() + 3));
+                      const isOverloaded = prov.utilization > 80;
+                      const isSelected = selectedProviderIds.includes(prov.id);
+
+                      return (
+                          <div 
+                            key={prov.id} 
+                            onClick={() => toggleProviderSelection(prov.id)}
+                            className={`bg-white p-6 rounded-[2.5rem] border-2 transition-all cursor-pointer group relative overflow-hidden ${isSelected ? 'border-indigo-600 shadow-2xl ring-4 ring-indigo-50' : 'border-transparent hover:border-gray-200 shadow-sm'}`}
+                          >
+                              <div className="flex justify-between items-start mb-6">
+                                  <div className="relative">
+                                    <img src={prov.avatar} className="w-20 h-20 rounded-[2rem] border-4 border-white shadow-2xl bg-white group-hover:scale-105 transition-transform" />
+                                    <div className="absolute -bottom-1 -right-1">
+                                        {getStatusBadge(prov.status)}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col gap-2 items-end">
+                                      <button 
+                                        onClick={(e) => { e.stopPropagation(); setProfileProviderId(prov.id); }}
+                                        className="p-2 text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                                      >
+                                          <Settings2 size={18} />
+                                      </button>
+                                      {isNearExpiry && (
+                                          <div title="Credential Expiry Risk" className="p-2 bg-rose-50 text-rose-600 rounded-xl animate-pulse">
+                                              <ShieldAlert size={18} />
+                                          </div>
+                                      )}
+                                      {isOverloaded && (
+                                          <div title="Burnout Risk: High Load" className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                                              <AlertTriangle size={18} />
+                                          </div>
+                                      )}
+                                  </div>
+                              </div>
+
+                              <div className="space-y-1 mb-6">
+                                  <h4 className="text-xl font-black text-gray-900 tracking-tight leading-tight">{prov.name}</h4>
+                                  <div className="flex items-center gap-2">
+                                      <span className={`text-[9px] font-black uppercase tracking-widest ${prov.role === 'DOCTOR' ? 'text-indigo-600' : 'text-emerald-600'}`}>{prov.role}</span>
+                                      <span className="text-gray-200">•</span>
+                                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">ID: {prov.id.toUpperCase()}</span>
+                                  </div>
+                              </div>
+
+                              <div className="space-y-3 pt-6 border-t border-gray-50">
+                                  <div className="flex justify-between items-center px-1">
+                                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5"><Activity size={12}/> Live Load</span>
+                                      <span className={`text-[10px] font-black ${isOverloaded ? 'text-rose-600' : 'text-gray-900'}`}>{prov.utilization}%</span>
+                                  </div>
+                                  <div className="w-full h-2 bg-gray-50 rounded-full overflow-hidden">
+                                      <div 
+                                        className={`h-full transition-all duration-700 rounded-full ${getUtilizationColor(prov.utilization)}`}
+                                        style={{ width: `${prov.utilization}%` }}
+                                      />
+                                  </div>
+                              </div>
+
+                              <div className="mt-6 flex flex-wrap gap-1.5">
+                                  {prov.assignedSpecialtyIds.map(sId => {
+                                      const spec = specialties.find(s => s.id === sId);
+                                      return (
+                                          <span key={sId} className="px-2 py-1 bg-gray-50 text-gray-400 rounded-lg text-[8px] font-black uppercase tracking-tighter border border-gray-100">
+                                              {spec?.name}
+                                          </span>
+                                      );
+                                  })}
+                              </div>
+                              
+                              {isSelected && (
+                                  <div className="absolute top-4 left-4 w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg animate-in zoom-in">
+                                      <Check size={14} />
+                                  </div>
+                              )}
+                          </div>
+                      );
+                  })}
+              </div>
+          </div>
+      )}
+
+      {/* SPECIALTY MANAGEMENT DRAWER */}
+      {managedSpecialty && (
+        <div className="fixed inset-0 z-[110] flex justify-end">
+            <div className="absolute inset-0 bg-indigo-950/20 backdrop-blur-sm" onClick={() => setManagedSpecialty(null)} />
+            <div className="relative z-[111] w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+                <div className="p-8 border-b border-indigo-50 flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center">
+                            <Building2 size={24} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-gray-900 tracking-tight">Configure {managedSpecialty.name}</h3>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Department Governance</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setManagedSpecialty(null)} className="p-2 hover:bg-gray-100 rounded-xl transition-all">
+                        <X size={24} className="text-gray-400" />
+                    </button>
                 </div>
 
-                <form onSubmit={handleCreateSession} className="space-y-6">
-                    {/* Service Selection */}
-                    <div>
-                         <label className="block text-xs font-bold text-gray-700 mb-3 uppercase tracking-wide">1. Select Service</label>
-                         
-                         {/* Toggle for Creation */}
-                         {isCreatingService ? (
-                            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-5 relative animate-in fade-in zoom-in-95">
-                                <button type="button" onClick={() => setIsCreatingService(false)} className="absolute top-3 right-3 text-indigo-400 hover:text-indigo-600">
-                                    <X size={18} />
-                                </button>
-                                <h4 className="font-bold text-indigo-900 mb-3 flex items-center gap-2"><Layers size={16}/> Create New Service Class</h4>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="col-span-2">
-                                        <label className="text-xs font-bold text-indigo-700 mb-1 block">Service Name</label>
-                                        <input 
-                                            type="text" 
-                                            placeholder="e.g. Advanced Pilates"
-                                            value={newServiceName}
-                                            onChange={(e) => setNewServiceName(e.target.value)}
-                                            className="w-full border border-indigo-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-gray-900"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-indigo-700 mb-1 block">Duration (min)</label>
-                                        <input 
-                                            type="number" 
-                                            value={newServiceDuration}
-                                            onChange={(e) => setNewServiceDuration(parseInt(e.target.value))}
-                                            className="w-full border border-indigo-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-gray-900"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-indigo-700 mb-1 block">Max Capacity</label>
-                                        <input 
-                                            type="number" 
-                                            value={newServiceCapacity}
-                                            onChange={(e) => setNewServiceCapacity(parseInt(e.target.value))}
-                                            className="w-full border border-indigo-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-gray-900"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                         ) : (
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                {services.map(service => (
-                                    <div 
-                                        key={service.id}
-                                        onClick={() => setNewSessionService(service.id)}
-                                        className={`cursor-pointer rounded-xl border p-4 flex flex-col items-center gap-3 transition-all text-center ${
-                                            newSessionService === service.id 
-                                            ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' 
-                                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        <div className={`p-2 rounded-lg ${getServiceColor(service.name)}`}>
-                                            {getServiceIcon(service.name)}
+                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-10">
+                    <section className="space-y-4">
+                        <div className="flex justify-between items-center px-2">
+                            <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                <DollarSign size={14} className="text-indigo-400" /> Active Service Catalog
+                            </h4>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3">
+                            {services.filter(s => s.specialtyId === managedSpecialty.id).map(svc => (
+                                <div key={svc.id} className="p-5 bg-gray-50 border border-gray-100 rounded-2xl flex justify-between items-center group hover:bg-white hover:shadow-lg transition-all">
+                                    <div className="flex items-center gap-4">
+                                        <div className="p-3 bg-white rounded-xl shadow-sm text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                            <FileText size={18} />
                                         </div>
                                         <div>
-                                            <p className="font-bold text-sm text-gray-900">{service.name}</p>
-                                            <p className="text-xs text-gray-500">{service.durationMinutes} min</p>
+                                            <p className="text-sm font-black text-gray-900">{svc.name}</p>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{svc.durationMinutes}m duration • ${svc.price} base</p>
                                         </div>
                                     </div>
-                                ))}
-                                {/* Create New Card */}
-                                <div 
-                                    onClick={() => {
-                                        setIsCreatingService(true);
-                                        setNewSessionService('');
-                                    }}
-                                    className="cursor-pointer rounded-xl border border-dashed border-gray-300 p-4 flex flex-col items-center justify-center gap-3 transition-all text-center hover:bg-gray-50 hover:border-gray-400 group"
-                                >
-                                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
-                                        <Plus size={20} />
-                                    </div>
-                                    <p className="font-bold text-sm text-gray-500 group-hover:text-gray-700">Add New Service</p>
+                                    <button className="p-2 text-gray-300 hover:text-indigo-600 transition-colors">
+                                        <Settings2 size={16} />
+                                    </button>
                                 </div>
-                            </div>
-                         )}
-                    </div>
+                            ))}
+                        </div>
+                    </section>
 
-                    {/* Date & Time */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                             <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">2. Date & Time</label>
-                             <div className="space-y-4">
-                                {/* Visual Calendar Widget */}
-                                {renderCalendar()}
-                                
-                                <div className="flex items-center gap-3">
-                                    <div className="flex-1">
-                                        <label className="text-xs font-medium text-gray-500 mb-1 block">From</label>
-                                        <input 
-                                            type="time" 
-                                            value={newSessionTime}
-                                            onChange={(e) => setNewSessionTime(e.target.value)}
-                                            required
-                                            className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium shadow-sm"
-                                        />
+                    <section className="space-y-4">
+                        <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
+                            <Users size={14} className="text-emerald-400" /> Authorized Workforce
+                        </h4>
+                        <div className="grid grid-cols-1 gap-2">
+                            {providers.filter(p => p.assignedSpecialtyIds.includes(managedSpecialty.id)).map(p => (
+                                <div key={p.id} className="p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between shadow-sm">
+                                    <div className="flex items-center gap-3">
+                                        <img src={p.avatar} className="w-10 h-10 rounded-xl border border-gray-100" />
+                                        <div>
+                                            <p className="text-sm font-black text-gray-800 tracking-tight">{p.name}</p>
+                                            <div className="flex gap-2">
+                                                {getStatusBadge(p.status)}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="pt-5 text-gray-300">
-                                        <ArrowRight size={16} />
-                                    </div>
-                                    <div className="flex-1">
-                                        <label className="text-xs font-medium text-gray-500 mb-1 block">To</label>
-                                        <input 
-                                            type="time" 
-                                            value={newSessionEndTime}
-                                            onChange={(e) => setNewSessionEndTime(e.target.value)}
-                                            required
-                                            className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium shadow-sm"
-                                        />
-                                    </div>
+                                    <button className="text-[9px] font-black text-gray-300 hover:text-rose-600 uppercase tracking-widest transition-colors">
+                                        Deauthorize
+                                    </button>
                                 </div>
-                             </div>
+                            ))}
                         </div>
-                        
-                        {/* Provider & Room */}
-                        <div>
-                             <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">3. Details</label>
-                             <div className="space-y-3">
-                                {isCreatingProvider ? (
-                                    <div className="relative">
-                                         <input 
-                                            type="text" 
-                                            value={newProviderNameInput}
-                                            onChange={(e) => setNewProviderNameInput(e.target.value)}
-                                            placeholder="Enter Instructor Name"
-                                            className="w-full border border-indigo-200 bg-indigo-50 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-gray-900"
-                                            autoFocus
-                                        />
-                                        <button 
-                                            type="button" 
-                                            onClick={() => { setIsCreatingProvider(false); setNewProviderNameInput(''); }} 
-                                            className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-                                        >
-                                            <X size={16}/>
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <select 
-                                        value={newSessionProvider}
-                                        onChange={handleProviderChange}
-                                        required
-                                        className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
-                                    >
-                                        <option value="">Select Instructor...</option>
-                                        {providers.map(p => <option key={p} value={p}>{p}</option>)}
-                                        <option value="__NEW__" className="font-bold text-indigo-600">+ Add New Instructor...</option>
-                                    </select>
-                                )}
-                                
-                                <input 
-                                    type="text" 
-                                    value={newSessionRoom}
-                                    onChange={(e) => setNewSessionRoom(e.target.value)}
-                                    placeholder="Room / Location"
-                                    className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
-                                />
-                             </div>
-
-                             <div className="mt-6">
-                                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">4. Description (Optional)</label>
-                                <textarea 
-                                    value={newSessionDescription}
-                                    onChange={(e) => setNewSessionDescription(e.target.value)}
-                                    rows={4}
-                                    placeholder="Add specific notes for this session..."
-                                    className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none text-sm resize-none"
-                                />
-                             </div>
-                        </div>
-                    </div>
-                </form>
-            </div>
-
-            {/* Preview Panel */}
-            <div className="w-full lg:w-80 flex flex-col gap-6">
-                <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-6 text-white shadow-xl">
-                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                        <AlertCircle size={20} className="text-indigo-200"/> Preview
-                    </h3>
-                    <p className="text-indigo-100 text-sm mb-6">This is how the session will appear on your dashboard.</p>
-                    
-                    <div className="bg-white text-gray-900 rounded-xl p-4 shadow-lg transform rotate-2">
-                        <div className="flex items-center gap-3 mb-3">
-                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                                 isCreatingService ? 'bg-indigo-100 text-indigo-600' : (
-                                    newSessionService ? getServiceColor(services.find(s=>s.id===newSessionService)?.name || '') : 'bg-gray-100 text-gray-400'
-                                 )
-                             }`}>
-                                {isCreatingService ? <Plus size={20}/> : (
-                                    newSessionService ? getServiceIcon(services.find(s=>s.id===newSessionService)?.name || '') : <Calendar size={20}/>
-                                )}
-                             </div>
-                             <div>
-                                <p className="font-bold text-sm">
-                                    {isCreatingService 
-                                        ? (newServiceName || 'New Service') 
-                                        : (newSessionService ? services.find(s=>s.id===newSessionService)?.name : 'Select Service')
-                                    }
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                    {newSessionDate || 'Date'} • {newSessionTime || 'Start'} {newSessionEndTime ? `- ${newSessionEndTime}` : ''}
-                                </p>
-                             </div>
-                        </div>
-                        <div className="text-xs text-gray-500 flex items-center gap-2 mb-3">
-                            <span className="bg-gray-100 px-2 py-1 rounded">
-                                {isCreatingProvider ? (newProviderNameInput || 'New Instructor') : (newSessionProvider || 'Provider')}
-                            </span>
-                            <span>•</span>
-                            <span>{newSessionRoom || 'Room'}</span>
-                        </div>
-                        <div className="w-full bg-gray-100 rounded-full h-2">
-                            <div className="w-1/3 bg-green-500 h-full rounded-full"></div>
-                        </div>
-                    </div>
+                    </section>
                 </div>
 
-                <button 
-                    onClick={handleCreateSession}
-                    disabled={isSubmitting || (!isCreatingService && !newSessionService) || !newSessionDate || !newSessionTime || !newSessionEndTime || (!isCreatingProvider && !newSessionProvider)}
-                    className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {isSubmitting ? 'Creating...' : (
-                        <>
-                        <CheckCircle2 size={20} /> Publish Session
-                        </>
-                    )}
-                </button>
+                <div className="p-8 border-t border-indigo-50 bg-white">
+                    <button onClick={() => setManagedSpecialty(null)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all">
+                        Commit Configurations
+                    </button>
+                </div>
             </div>
         </div>
       )}
 
-      {/* Attendees Drawer (Shared) */}
-      {selectedSession && (
-        <div className="fixed inset-0 z-40 flex justify-end">
-          <div className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm transition-opacity" onClick={() => setSelectedSession(null)}></div>
-          <div className="relative z-50 w-full max-w-md bg-white shadow-2xl h-full flex flex-col transform transition-transform animate-in slide-in-from-right duration-300">
-            <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-white z-10">
-               <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${getServiceColor(selectedSession.serviceName)}`}>
-                    {getServiceIcon(selectedSession.serviceName)}
+      {/* NEW STAFF REGISTRATION MODAL */}
+      {isAddingStaff && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-indigo-950/20 backdrop-blur-md" onClick={() => setIsAddingStaff(false)} />
+              <div className="relative z-50 w-full max-w-md bg-white rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center mb-8">
+                    <h3 className="text-xl font-black text-gray-900 tracking-tight">Onboard Personnel</h3>
+                    <button onClick={() => setIsAddingStaff(false)} className="text-gray-400 hover:text-gray-900"><X size={20} /></button>
                   </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">{selectedSession.serviceName}</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">{new Date(selectedSession.startTime).toLocaleDateString()} • {selectedSession.room}</p>
+                  
+                  <div className="space-y-6">
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Legal Full Name</label>
+                          <div className="relative group">
+                            <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-indigo-600 transition-colors" size={18} />
+                            <input type="text" value={newStaffName} onChange={(e) => setNewStaffName(e.target.value)} 
+                                className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-indigo-600 outline-none text-sm font-bold transition-all"
+                                placeholder="Dr. John Doe"
+                            />
+                          </div>
+                      </div>
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Clinical Role</label>
+                          <select value={newStaffRole} onChange={(e) => setNewStaffRole(e.target.value as any)}
+                              className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-indigo-600 outline-none text-sm font-bold appearance-none cursor-pointer"
+                          >
+                              <option value="DOCTOR">Attending Physician (Doctor)</option>
+                              <option value="NURSE">Nursing Staff (Nurse)</option>
+                          </select>
+                      </div>
+                      
+                      <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex gap-3">
+                          <ShieldAlert className="text-amber-600 shrink-0" size={18} />
+                          <p className="text-[10px] text-amber-800 font-medium leading-relaxed uppercase">Manual credential verification is required after onboarding to ensure legal compliance.</p>
+                      </div>
                   </div>
-               </div>
-               <button onClick={() => setSelectedSession(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={20} className="text-gray-500"/></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
-               {selectedSession.description && (
-                  <div className="mb-6 bg-white border border-gray-200 rounded-xl p-4 text-sm text-gray-600 shadow-sm">
-                    <h4 className="font-bold mb-1 flex items-center gap-2 text-gray-800"><Clock size={14}/> Session Details</h4>
-                    <p className="leading-relaxed">{selectedSession.description}</p>
+                  
+                  <div className="flex flex-col gap-3 mt-10">
+                      <button onClick={handleCreateStaff} className="w-full py-5 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 active:scale-[0.98] hover:bg-indigo-700 transition-all">Confirm Registration</button>
                   </div>
-               )}
-
-               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                 <Users size={14}/> Registered Attendees ({attendees.length}/{selectedSession.maxCapacity})
-               </h3>
-               
-               {attendees.length === 0 ? (
-                 <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-200">
-                   <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <Users size={20} className="text-gray-300"/>
-                   </div>
-                   <p className="text-gray-400 text-sm font-medium">No bookings yet.</p>
-                 </div>
-               ) : (
-                 <div className="space-y-3">
-                   {attendees.map(appt => (
-                     <div key={appt.id} className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-xl hover:shadow-md transition-all group">
-                        <div className="flex items-center gap-4">
-                           <img 
-                                src={appt.avatar || `https://api.dicebear.com/9.x/avataaars/svg?seed=${appt.clientId}`} 
-                                alt="" 
-                                className="w-10 h-10 rounded-full border-2 border-white shadow-sm bg-gray-100"
-                           />
-                           <div>
-                               <span className="font-bold text-gray-900 text-sm block">{appt.clientName}</span>
-                               <span className="text-xs text-gray-400">Booked {new Date(appt.startTime).toLocaleDateString()}</span>
-                           </div>
-                        </div>
-                        <span className="text-[10px] text-green-700 bg-green-50 border border-green-100 px-2 py-1 rounded-full font-bold uppercase tracking-wide">Confirmed</span>
-                     </div>
-                   ))}
-                 </div>
-               )}
-            </div>
+              </div>
           </div>
-        </div>
       )}
 
+      {/* Profile Drawer */}
+      {profileProviderId && (
+          <ProviderProfileDrawer 
+            isOpen={!!profileProviderId}
+            onClose={() => setProfileProviderId(null)}
+            providerId={profileProviderId}
+            onUpdate={loadData}
+          />
+      )}
     </div>
   );
 };
 
-export default Classes;
+export default Specialties;

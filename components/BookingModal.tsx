@@ -63,6 +63,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, client, on
         const startTime = new Date(selectedClassSession.startTime);
         const endTime = new Date(startTime.getTime() + selectedClassSession.durationMinutes * 60000);
         
+        // Removed maxCapacity from appointment object as it's not defined in types.ts for Appointment
         await mockApi.createAppointment({
           clientId: client.id,
           clientName: client.name,
@@ -72,8 +73,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ isOpen, onClose, client, on
           startTime: startTime.toISOString(),
           endTime: endTime.toISOString(),
           providerName: selectedClassSession.providerName,
-          room: selectedClassSession.room,
-          maxCapacity: selectedClassSession.maxCapacity
+          room: selectedClassSession.room
         });
 
         // Send confirmation message automatically

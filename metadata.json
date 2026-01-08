@@ -1,5 +1,5 @@
 {
-  "name": "ConversIA Dashboard",
-  "description": "Business owner dashboard for WhatsApp appointment scheduling and conversation management.",
+  "name": "ConversIA Medical Dashboard",
+  "description": "Healthcare owner dashboard for WhatsApp patient scheduling and clinical conversation management.",
   "requestFramePermissions": []
 }

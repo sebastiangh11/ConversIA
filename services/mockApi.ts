@@ -8,341 +8,187 @@ import {
   MessageSender, 
   Service,
   BusinessSettings,
-  ClassSession,
+  Specialty,
+  Provider,
+  TimeSlot,
+  ProviderAvailability,
+  WorkingHours,
   Transaction,
-  Payout
+  Payout,
+  ClassSession,
+  InternalNote,
+  AuditLog,
+  UserAccount
 } from '../types';
 
-// --- HELPERS ---
-const NOW = Date.now();
-const DAY_MS = 86400000;
-const HOUR_MS = 3600000;
+const SLOT_INTERVAL = 30; // Minutes
 
-// --- SEED DATA ---
-
-const SERVICES: Service[] = [
-  { id: 's1', name: 'Men\'s Haircut', durationMinutes: 30, price: 35, isClass: false },
-  { id: 's2', name: 'Beard Trim', durationMinutes: 15, price: 20, isClass: false },
-  { id: 's3', name: 'Morning Yoga', durationMinutes: 60, price: 25, isClass: true, capacity: 12 },
-  { id: 's4', name: 'Crossfit 101', durationMinutes: 60, price: 30, isClass: true, capacity: 15 },
-  { id: 's5', name: 'Deep Tissue Massage', durationMinutes: 60, price: 90, isClass: false },
-  { id: 's6', name: 'HIIT Blast', durationMinutes: 45, price: 25, isClass: true, capacity: 20 },
-  { id: 's7', name: 'Nutrition Consult', durationMinutes: 45, price: 75, isClass: false },
-  { id: 's8', name: 'Hot Yoga', durationMinutes: 90, price: 35, isClass: true, capacity: 10 },
-];
-
-let PROVIDERS = [
-  'Instructor Sarah', 
-  'Coach Mike', 
-  'Barber Mike', 
-  'Yoga Master Jen', 
-  'Dr. Alyx', 
-  'Massage Therapist Tom', 
-  'Trainer Lisa'
-];
-
-// Using DiceBear for Memoji-style avatars
 const getAvatar = (seed: string) => `https://api.dicebear.com/9.x/avataaars/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
 
-let CLIENTS: Client[] = [
-  { 
-    id: 'c1', name: 'Alice Johnson', phone: '+15550101', email: 'alice@example.com',
-    avatar: getAvatar('Alice'), firstSeen: '2023-10-01', lastSeen: '2023-10-25', 
-    totalAppointments: 12, notes: 'Prefers afternoon appointments. Allergic to lavender.', preferredContactMethod: 'WHATSAPP',
-    tags: ['Regular', 'Yoga Fan']
-  },
-  { 
-    id: 'c2', name: 'Bob Smith', phone: '+15550102', avatar: getAvatar('Bob'),
-    firstSeen: '2023-10-15', lastSeen: '2023-10-26', totalAppointments: 3,
-    notes: 'New customer, referred by Mike.', preferredContactMethod: 'PHONE',
-    tags: ['New Client', 'Referral']
-  },
-  { 
-    id: 'c3', name: 'Charlie Brown', phone: '+15550103', avatar: getAvatar('Charlie'),
-    firstSeen: '2023-09-01', lastSeen: '2023-10-20', totalAppointments: 8, preferredContactMethod: 'WHATSAPP',
-    tags: ['Regular']
-  },
-  { 
-    id: 'c4', name: 'Diana Prince', phone: '+15550104', email: 'diana@themyscira.net',
-    avatar: getAvatar('Diana'), firstSeen: '2023-10-26', lastSeen: '2023-10-26', 
-    totalAppointments: 1, notes: 'Interested in advanced yoga classes.', preferredContactMethod: 'EMAIL',
-    tags: ['New Client', 'VIP']
-  },
-  { 
-    id: 'c5', name: 'Evan Wright', phone: '+15550105', avatar: getAvatar('Evan'),
-    firstSeen: '2023-08-10', lastSeen: '2023-11-01', totalAppointments: 15, preferredContactMethod: 'WHATSAPP',
-    tags: ['VIP', 'High Value']
-  },
-  { 
-    id: 'c6', name: 'Fiona Gallagher', phone: '+15550106', avatar: getAvatar('Fiona'),
-    firstSeen: '2023-11-02', lastSeen: '2023-11-02', totalAppointments: 0, preferredContactMethod: 'WHATSAPP',
-    tags: ['New Client']
-  },
-  { 
-    id: 'c7', name: 'George Miller', phone: '+15550107', avatar: getAvatar('George'),
-    firstSeen: '2023-05-12', lastSeen: '2023-10-30', totalAppointments: 5, preferredContactMethod: 'PHONE',
-    tags: []
-  },
-  { 
-    id: 'c8', name: 'Hannah Montana', phone: '+15550108', avatar: getAvatar('Hannah'),
-    firstSeen: '2023-01-20', lastSeen: '2023-11-03', totalAppointments: 22, notes: 'VIP Client. Likes sparkling water.', preferredContactMethod: 'WHATSAPP',
-    tags: ['VIP', 'Celebrity']
-  },
-  { 
-    id: 'c9', name: 'Ian Somerhalder', phone: '+15550109', avatar: getAvatar('Ian'),
-    firstSeen: '2023-09-15', lastSeen: '2023-10-15', totalAppointments: 2, preferredContactMethod: 'EMAIL',
-    tags: []
-  },
-  { 
-    id: 'c10', name: 'Julia Roberts', phone: '+15550110', avatar: getAvatar('Julia'),
-    firstSeen: '2023-07-04', lastSeen: '2023-11-01', totalAppointments: 6, preferredContactMethod: 'WHATSAPP',
-    tags: ['Regular', 'Morning']
-  },
-  { 
-    id: 'c11', name: 'Kevin Hart', phone: '+15550111', avatar: getAvatar('Kevin'),
-    firstSeen: '2023-10-01', lastSeen: '2023-10-01', totalAppointments: 1, preferredContactMethod: 'PHONE',
-    tags: ['Late Payer']
-  },
-  { 
-    id: 'c12', name: 'Luna Lovegood', phone: '+15550112', avatar: getAvatar('Luna'),
-    firstSeen: '2023-11-01', lastSeen: '2023-11-04', totalAppointments: 1, notes: 'Very eccentric, loves colorful yoga mats.', preferredContactMethod: 'WHATSAPP',
-    tags: ['New Client', 'Yoga Fan']
-  },
-];
-
-// --- GENERATE CLASS SESSIONS (Past & Future) ---
-let CLASS_SESSIONS: ClassSession[] = [];
-
-// Helper to add session
-const addSession = (id: string, serviceIdx: number, dayOffset: number, hour: number, room: string, provider: string, attendees: number) => {
-  const service = SERVICES[serviceIdx];
-  const startTime = new Date(NOW + (dayOffset * DAY_MS));
-  startTime.setHours(hour, 0, 0, 0);
-  
-  CLASS_SESSIONS.push({
-    id,
-    serviceId: service.id,
-    serviceName: service.name,
-    startTime: startTime.toISOString(),
-    durationMinutes: service.durationMinutes,
-    providerName: provider,
-    room,
-    maxCapacity: service.capacity || 10,
-    currentAttendees: attendees,
-    description: `Standard session for ${service.name}.`
-  });
-};
-
-// Past Sessions (History)
-addSession('cs_past_1', 2, -5, 9, 'Room A', 'Instructor Sarah', 10); // Morning Yoga full
-addSession('cs_past_2', 3, -5, 18, 'Main Hall', 'Coach Mike', 12); // Crossfit
-addSession('cs_past_3', 5, -4, 17, 'Studio 2', 'Trainer Lisa', 18); // HIIT Blast
-addSession('cs_past_4', 2, -3, 9, 'Room A', 'Instructor Sarah', 8);
-addSession('cs_past_5', 7, -2, 19, 'Room B', 'Yoga Master Jen', 6); // Hot Yoga
-addSession('cs_past_6', 3, -1, 18, 'Main Hall', 'Coach Mike', 14);
-
-// Upcoming Sessions
-addSession('cs1', 2, 1, 9, 'Room A', 'Instructor Sarah', 7); // Tomorrow Morning Yoga
-addSession('cs2', 3, 1, 10, 'Main Hall', 'Coach Mike', 12); // Tomorrow Crossfit
-addSession('cs3', 5, 1, 17, 'Studio 2', 'Trainer Lisa', 5); // Tomorrow HIIT
-addSession('cs4', 2, 2, 9, 'Room A', 'Instructor Sarah', 2); // Day after
-addSession('cs5', 7, 2, 18, 'Room B', 'Yoga Master Jen', 9);
-addSession('cs6', 3, 3, 10, 'Main Hall', 'Coach Mike', 0);
-addSession('cs7', 5, 3, 17, 'Studio 2', 'Trainer Lisa', 1);
-
-// --- GENERATE APPOINTMENTS ---
-let APPOINTMENTS: Appointment[] = [];
-
-// Helper to create appointment
-const createMockAppt = (id: string, clientId: string, serviceIdx: number, timeOffsetHours: number, status: AppointmentStatus, session?: ClassSession) => {
-  const client = CLIENTS.find(c => c.id === clientId)!;
-  const service = SERVICES[serviceIdx];
-  const startTime = new Date(NOW + (timeOffsetHours * HOUR_MS));
-  const endTime = new Date(startTime.getTime() + service.durationMinutes * 60000);
-
-  // If linking to a class session, override times and details
-  const finalStart = session ? session.startTime : startTime.toISOString();
-  const finalEnd = session ? new Date(new Date(session.startTime).getTime() + session.durationMinutes * 60000).toISOString() : endTime.toISOString();
-  const provider = session ? session.providerName : (serviceIdx === 0 ? 'Barber Mike' : (serviceIdx === 4 ? 'Massage Therapist Tom' : 'Dr. Alyx'));
-  const room = session ? session.room : 'Treatment Room 1';
-
-  APPOINTMENTS.push({
-    id,
-    clientId,
-    clientName: client.name,
-    serviceId: service.id,
-    serviceName: service.name,
-    classSessionId: session?.id,
-    startTime: finalStart,
-    endTime: finalEnd,
-    providerName: provider,
-    room,
-    status,
-    currentAttendees: session?.currentAttendees,
-    maxCapacity: session?.maxCapacity
-  });
-};
-
-// Past Appointments
-createMockAppt('a_past_1', 'c1', 2, -120, AppointmentStatus.COMPLETED, CLASS_SESSIONS[0]); // Alice in past Yoga
-createMockAppt('a_past_2', 'c3', 0, -48, AppointmentStatus.COMPLETED); // Charlie Haircut
-createMockAppt('a_past_3', 'c5', 4, -26, AppointmentStatus.COMPLETED); // Evan Massage
-createMockAppt('a_past_4', 'c8', 6, -24, AppointmentStatus.CANCELLED); // Hannah Nutrition
-createMockAppt('a_past_5', 'c2', 1, -20, AppointmentStatus.NO_SHOW); // Bob Beard Trim
-createMockAppt('a_past_6', 'c7', 0, -125, AppointmentStatus.COMPLETED); // George Haircut
-
-// Upcoming Appointments
-createMockAppt('a1', 'c1', 2, 24, AppointmentStatus.BOOKED, CLASS_SESSIONS[6]); // Alice in upcoming Yoga (cs1)
-createMockAppt('a2', 'c2', 1, 48, AppointmentStatus.BOOKED); // Bob Beard Trim
-createMockAppt('a3', 'c4', 2, 24, AppointmentStatus.BOOKED, CLASS_SESSIONS[6]); // Diana in upcoming Yoga (cs1)
-createMockAppt('a4', 'c5', 3, 25, AppointmentStatus.BOOKED, CLASS_SESSIONS[7]); // Evan in Crossfit (cs2)
-createMockAppt('a5', 'c8', 4, 26, AppointmentStatus.BOOKED); // Hannah Massage
-createMockAppt('a6', 'c12', 7, 50, AppointmentStatus.BOOKED, CLASS_SESSIONS[10]); // Luna Hot Yoga (cs5)
-createMockAppt('a7', 'c9', 0, 3, AppointmentStatus.PENDING); // Ian Haircut pending
-createMockAppt('a8', 'c10', 5, 29, AppointmentStatus.BOOKED, CLASS_SESSIONS[8]); // Julia HIIT
-
-// --- CONVERSATIONS & MESSAGES ---
-let CONVERSATIONS: Conversation[] = [];
-let MESSAGES: Message[] = [];
-
-const createConv = (id: string, clientId: string, lastMsg: string, timeOffsetMin: number, unread: number, status: 'NEW' | 'ACTIVE' | 'ARCHIVED', apptId?: string) => {
-  const client = CLIENTS.find(c => c.id === clientId)!;
-  const time = new Date(NOW - (timeOffsetMin * 60000)).toISOString();
-  
-  CONVERSATIONS.push({
-    id,
-    clientId,
-    clientName: client.name,
-    clientPhone: client.phone,
-    lastMessageText: lastMsg,
-    lastMessageTime: time,
-    unreadCount: unread,
-    status,
-    relatedAppointmentId: apptId
-  });
-
-  // Basic message history for each conv
-  MESSAGES.push({
-    id: `m_${id}_1`, conversationId: id, text: 'Hello, I have a question.', sender: MessageSender.CLIENT, timestamp: new Date(NOW - (timeOffsetMin * 60000) - 300000).toISOString(), isRead: true
-  });
-  if (status !== 'NEW') {
-     MESSAGES.push({
-        id: `m_${id}_2`, conversationId: id, text: 'Hi! How can I help you today?', sender: MessageSender.BUSINESS, timestamp: new Date(NOW - (timeOffsetMin * 60000) - 200000).toISOString(), isRead: true
-      });
-  }
-  MESSAGES.push({
-    id: `m_${id}_3`, conversationId: id, text: lastMsg, sender: MessageSender.CLIENT, timestamp: time, isRead: unread === 0
-  });
-};
-
-createConv('conv1', 'c1', 'See you at the yoga class!', 30, 0, 'ACTIVE', 'a1');
-createConv('conv2', 'c6', 'Do you have any openings for a massage this weekend?', 5, 1, 'NEW');
-createConv('conv3', 'c4', 'Thanks for booking me in.', 120, 0, 'ARCHIVED', 'a3');
-createConv('conv4', 'c8', 'Can I reschedule my massage to 4 PM?', 10, 1, 'ACTIVE', 'a5');
-createConv('conv5', 'c12', 'Is the hot yoga class suitable for beginners?', 600, 0, 'ACTIVE', 'a6');
-createConv('conv6', 'c2', 'Sorry I missed my appointment yesterday.', 1440, 0, 'ARCHIVED', 'a_past_5');
-createConv('conv7', 'c9', 'Confirming my haircut later today.', 15, 1, 'ACTIVE', 'a7');
-
-// --- TRANSACTIONS ---
-let TRANSACTIONS: Transaction[] = [];
-
-const createTransaction = (id: string, clientId: string, serviceIdx: number, daysAgo: number, status: 'PAID' | 'PENDING' | 'REFUNDED') => {
-  const client = CLIENTS.find(c => c.id === clientId)!;
-  const service = SERVICES[serviceIdx];
-  const date = new Date(NOW - (daysAgo * DAY_MS)).toISOString();
-  
-  TRANSACTIONS.push({
-    id,
-    clientId,
-    clientName: client.name,
-    serviceId: service.id,
-    serviceName: service.name,
-    amount: service.price,
-    currency: 'USD',
-    status,
-    date,
-    stripeTransactionId: `ch_${Math.random().toString(36).substr(2, 9)}`,
-    paymentMethod: Math.random() > 0.3 ? 'CARD' : (Math.random() > 0.5 ? 'WALLET' : 'OTHER')
-  });
-};
-
-// Generate some transactions
-CLIENTS.forEach((c, idx) => {
-    createTransaction(`t_${idx}_1`, c.id, Math.floor(Math.random() * SERVICES.length), Math.floor(Math.random() * 20), 'PAID');
-    if (idx % 3 === 0) createTransaction(`t_${idx}_2`, c.id, 0, 2, 'PENDING');
-    if (idx % 7 === 0) createTransaction(`t_${idx}_3`, c.id, 4, 15, 'REFUNDED');
-});
-
-// --- PAYOUTS ---
-let PAYOUTS: Payout[] = [
-    { id: 'po_1', amount: 1450.50, status: 'COMPLETED', arrivalDate: new Date(NOW - 5 * DAY_MS).toISOString(), bankName: 'Chase Bank (...4421)' },
-    { id: 'po_2', amount: 890.00, status: 'COMPLETED', arrivalDate: new Date(NOW - 12 * DAY_MS).toISOString(), bankName: 'Chase Bank (...4421)' },
-    { id: 'po_3', amount: 1200.00, status: 'PENDING', arrivalDate: new Date(NOW + 2 * DAY_MS).toISOString(), bankName: 'Chase Bank (...4421)' },
-    { id: 'po_4', amount: 350.25, status: 'SCHEDULED', arrivalDate: new Date(NOW + 5 * DAY_MS).toISOString(), bankName: 'Chase Bank (...4421)' },
-];
-
-// --- SETTINGS ---
-
-const DEFAULT_WORKING_DAY = { 
-    open: '09:00', 
-    close: '18:00', 
-    isOpen: true,
-    isSplit: false,
-    open2: '19:00', 
-    close2: '22:00'
-};
+// --- DATA ---
 
 let SETTINGS: BusinessSettings = {
-  name: 'Downtown Cuts & Yoga',
-  description: 'Premium grooming and wellness center in the heart of downtown. We offer bespoke haircuts and rejuvenating yoga sessions.',
+  name: 'ConversIA Medical Hub',
+  description: 'AI-powered clinical workflow.',
   timezone: 'America/New_York',
-  whatsappNumber: '+1 555 123 4567',
+  whatsappNumber: '+15550000',
   reminder24h: true,
-  reminder1h: false,
-  concurrentSlots: 3,
-  daysOff: [
-    { date: '2023-12-25', description: 'Christmas Day' },
-    { date: '2024-01-01', description: 'New Year\'s Day' }
-  ],
-  aiPrompt: `You are a helpful and polite receptionist for Downtown Cuts & Yoga. 
-Your goal is to help customers book appointments, check availability, and answer basic questions about our services.
-- Always be professional and concise.
-- If a user asks for a service we don't provide, politely inform them.
-- When booking, confirm the date, time, and service before finalizing.`,
+  reminder1h: true,
+  concurrentSlots: 2,
+  aiPrompt: 'Professional medical assistant.',
   workingHours: {
-    monday: { ...DEFAULT_WORKING_DAY },
-    tuesday: { ...DEFAULT_WORKING_DAY },
-    wednesday: { ...DEFAULT_WORKING_DAY },
-    thursday: { ...DEFAULT_WORKING_DAY },
-    friday: { ...DEFAULT_WORKING_DAY },
-    saturday: { ...DEFAULT_WORKING_DAY, open: '10:00', close: '16:00' },
-    sunday: { ...DEFAULT_WORKING_DAY, open: '00:00', close: '00:00', isOpen: false }
-  }
+    monday: { open: '09:00', close: '17:00', isOpen: true },
+    tuesday: { open: '09:00', close: '17:00', isOpen: true },
+    wednesday: { open: '09:00', close: '17:00', isOpen: true },
+    thursday: { open: '09:00', close: '17:00', isOpen: true },
+    friday: { open: '09:00', close: '17:00', isOpen: true },
+    saturday: { open: '10:00', close: '14:00', isOpen: false },
+    sunday: { open: '10:00', close: '14:00', isOpen: false },
+  },
+  daysOff: []
 };
 
-// --- MOCK API FUNCTIONS ---
+let USERS: UserAccount[] = [
+  { id: 'u1', name: 'Dr. Sarah Smith', email: 'sarah@conversia.io', role: 'ADMIN', createdAt: '2023-01-01', status: 'ACTIVE', lastLogin: new Date().toISOString() },
+  { id: 'u2', name: 'Receptionist Mike', email: 'mike@conversia.io', role: 'RECEPTIONIST', createdAt: '2023-05-12', status: 'ACTIVE' },
+];
+
+let PROVIDERS: Provider[] = [
+  { 
+    id: 'p1', 
+    name: 'Dr. Sarah Smith', 
+    role: 'DOCTOR', 
+    active: true, 
+    status: 'AVAILABLE',
+    utilization: 45,
+    licenseExpiry: '2025-12-01',
+    assignedSpecialtyIds: ['spec1'],
+    avatar: getAvatar('Sarah'), 
+    overrideClinicHours: false 
+  },
+  { 
+    id: 'p2', 
+    name: 'Dr. Michael Chen', 
+    role: 'DOCTOR', 
+    active: true, 
+    status: 'IN_CONSULT',
+    utilization: 88,
+    licenseExpiry: '2024-05-15',
+    assignedSpecialtyIds: ['spec1', 'spec2'],
+    avatar: getAvatar('Michael'), 
+    overrideClinicHours: true, 
+    workingHours: {
+      ...SETTINGS.workingHours,
+      wednesday: { open: '08:00', close: '12:00', isOpen: true } 
+    }
+  },
+  { 
+    id: 'p3', 
+    name: 'Nurse Jackie', 
+    role: 'NURSE', 
+    active: true, 
+    status: 'AVAILABLE',
+    utilization: 12,
+    licenseExpiry: '2026-01-01',
+    assignedSpecialtyIds: ['spec1'],
+    avatar: getAvatar('Jackie'), 
+    overrideClinicHours: false 
+  }
+];
+
+let SERVICES: Service[] = [
+  { id: 's1', name: 'Primary Consultation', durationMinutes: 30, price: 80, specialtyId: 'spec1', providerIds: ['p1', 'p2'], isClass: false },
+  { id: 's2', name: 'Flu Vaccination', durationMinutes: 15, price: 30, specialtyId: 'spec1', providerIds: ['p1', 'p3'], isClass: false },
+  { id: 's3', name: 'Pediatric Checkup', durationMinutes: 45, price: 100, specialtyId: 'spec2', providerIds: ['p2'], isClass: false }
+];
+
+let APPOINTMENTS: Appointment[] = [
+  { 
+    id: 'a1', clientId: 'c1', clientName: 'Ana Martínez', serviceId: 's1', serviceName: 'Primary Consultation', 
+    providerId: 'p1', providerName: 'Dr. Sarah Smith', 
+    startTime: new Date().toISOString().split('T')[0] + 'T10:00:00', 
+    endTime: new Date().toISOString().split('T')[0] + 'T10:30:00', 
+    status: AppointmentStatus.BOOKED,
+    source: 'AI',
+    threadId: 'conv1',
+    auditTrail: [{ type: 'created', at: new Date().toISOString(), by: 'WhatsApp Bot' }]
+  }
+];
+
+let CLIENTS: Client[] = [
+  { id: 'c1', name: 'Ana Martínez', phone: '+15550101', avatar: getAvatar('Ana'), firstSeen: '2023-10-01', lastSeen: '2024-01-01', totalAppointments: 4, email: 'ana@example.com', notes: 'Patient has mild asthma.' }
+];
+
+let CONVERSATIONS: Conversation[] = [
+  { 
+    id: 'conv1', clientId: 'c1', clientName: 'Ana Martínez', clientPhone: '+15550101', 
+    lastMessageText: 'Can I reschedule my appointment?', lastMessageTime: new Date().toISOString(), 
+    unreadCount: 1, status: 'OPEN', assignedTo: 'NONE', tags: ['Scheduling'], 
+    internalNotes: [], linkedAppointmentIds: ['a1']
+  }
+];
+
+let MESSAGES: Message[] = [
+  { id: 'm1', conversationId: 'conv1', text: 'Hi, I need to reschedule.', sender: MessageSender.CLIENT, timestamp: new Date().toISOString(), isRead: false }
+];
+
+let SPECIALTIES: Specialty[] = [
+  { id: 'spec1', name: 'General Practice', description: 'Primary care and family medicine.' },
+  { id: 'spec2', name: 'Pediatrics', description: 'Specialized care for children.' }
+];
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// --- ENGINE ---
+
+const getDayKey = (date: Date): keyof WorkingHours => {
+  const days: (keyof WorkingHours)[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  return days[date.getDay()];
+};
+
+const isOverlapping = (start1: Date, end1: Date, start2: Date, end2: Date) => {
+  return start1 < end2 && start2 < end1;
+};
+
 export const mockApi = {
-  getConversations: async (): Promise<Conversation[]> => {
+  getSettings: async () => SETTINGS,
+  getProviders: async () => [...PROVIDERS],
+  getServices: async () => [...SERVICES],
+  getClients: async () => [...CLIENTS],
+  getAppointments: async () => [...APPOINTMENTS],
+  getConversations: async () => [...CONVERSATIONS],
+  getSpecialties: async () => [...SPECIALTIES],
+  getTransactions: async () => [],
+  getPayouts: async () => [],
+  getClassSessions: async () => [],
+  
+  // User Management
+  getUserAccounts: async () => [...USERS],
+  createUserAccount: async (user: Partial<UserAccount>): Promise<UserAccount> => {
     await delay(300);
-    return [...CONVERSATIONS].sort((a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime());
+    const newUser: UserAccount = {
+      id: `u${Date.now()}`,
+      name: user.name || 'New User',
+      email: user.email || '',
+      role: user.role || 'RECEPTIONIST',
+      createdAt: new Date().toISOString(),
+      status: 'ACTIVE',
+      ...user
+    };
+    USERS.push(newUser);
+    return newUser;
   },
-
-  getConversationById: async (id: string): Promise<Conversation | undefined> => {
-    await delay(100);
-    return CONVERSATIONS.find(c => c.id === id);
-  },
-
-  getMessages: async (conversationId: string): Promise<Message[]> => {
+  deleteUserAccount: async (id: string): Promise<void> => {
     await delay(200);
-    return MESSAGES.filter(m => m.conversationId === conversationId).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    USERS = USERS.filter(u => u.id !== id);
   },
+
+  getMessages: async (conversationId: string) => MESSAGES.filter(m => m.conversationId === conversationId),
+  getClientById: async (id: string) => CLIENTS.find(c => c.id === id),
 
   sendMessage: async (conversationId: string, text: string): Promise<Message> => {
-    await delay(300);
-    const newMessage: Message = {
+    await delay(100);
+    const newMsg: Message = {
       id: `m${Date.now()}`,
       conversationId,
       text,
@@ -350,218 +196,214 @@ export const mockApi = {
       timestamp: new Date().toISOString(),
       isRead: true
     };
-    MESSAGES.push(newMessage);
-    
-    // Update conversation last message
-    const convIndex = CONVERSATIONS.findIndex(c => c.id === conversationId);
-    if (convIndex > -1) {
-      CONVERSATIONS[convIndex] = {
-        ...CONVERSATIONS[convIndex],
-        lastMessageText: text,
-        lastMessageTime: newMessage.timestamp,
-        status: 'ACTIVE'
-      };
+    MESSAGES.push(newMsg);
+    return newMsg;
+  },
+
+  updateConversationMeta: async (id: string, updates: Partial<Conversation>): Promise<Conversation> => {
+    await delay(100);
+    const idx = CONVERSATIONS.findIndex(c => c.id === id);
+    if (idx === -1) throw new Error("Conversation not found");
+    CONVERSATIONS[idx] = { ...CONVERSATIONS[idx], ...updates };
+    return CONVERSATIONS[idx];
+  },
+
+  ensureConversationExists: async (clientId: string): Promise<string> => {
+    const existing = CONVERSATIONS.find(c => c.clientId === clientId);
+    if (existing) return existing.id;
+    const client = CLIENTS.find(c => c.id === clientId);
+    if (!client) throw new Error("Client not found");
+
+    const newId = `conv${Date.now()}`;
+    CONVERSATIONS.push({
+      id: newId, clientId: client.id, clientName: client.name, clientPhone: client.phone,
+      lastMessageText: 'New thread opened', lastMessageTime: new Date().toISOString(),
+      unreadCount: 0, status: 'OPEN', assignedTo: 'NONE', tags: ['Manual Link'],
+      internalNotes: [], linkedAppointmentIds: []
+    });
+    return newId;
+  },
+
+  addInternalNote: async (conversationId: string, text: string, author: string): Promise<InternalNote> => {
+    await delay(100);
+    const note: InternalNote = { id: `n${Date.now()}`, text, timestamp: new Date().toISOString(), author };
+    const idx = CONVERSATIONS.findIndex(c => c.id === conversationId);
+    if (idx !== -1) {
+      CONVERSATIONS[idx].internalNotes = [note, ...CONVERSATIONS[idx].internalNotes];
     }
-    return newMessage;
+    return note;
   },
 
-  // --- APPOINTMENTS ---
-
-  getAppointments: async (): Promise<Appointment[]> => {
-    await delay(300);
-    return [...APPOINTMENTS].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+  updateProvider: async (id: string, updates: Partial<Provider>): Promise<Provider> => {
+    const idx = PROVIDERS.findIndex(p => p.id === id);
+    PROVIDERS[idx] = { ...PROVIDERS[idx], ...updates };
+    return PROVIDERS[idx];
   },
 
-  getAppointmentById: async (id: string): Promise<Appointment | undefined> => {
-    return APPOINTMENTS.find(a => a.id === id);
-  },
-
-  updateAppointmentStatus: async (id: string, status: AppointmentStatus): Promise<Appointment> => {
-    await delay(300);
-    const index = APPOINTMENTS.findIndex(a => a.id === id);
-    if (index === -1) throw new Error('Appointment not found');
-    
-    APPOINTMENTS[index] = { ...APPOINTMENTS[index], status };
-    return APPOINTMENTS[index];
-  },
-
-  rescheduleAppointment: async (id: string, newStart: string, newEnd: string, newClassSessionId?: string): Promise<Appointment> => {
-    await delay(500);
-    const index = APPOINTMENTS.findIndex(a => a.id === id);
-    if (index === -1) throw new Error('Appointment not found');
-
-    const oldAppt = APPOINTMENTS[index];
-
-    // If switching FROM a class, decrement old class attendees
-    if (oldAppt.classSessionId) {
-       const oldSessionIdx = CLASS_SESSIONS.findIndex(cs => cs.id === oldAppt.classSessionId);
-       if (oldSessionIdx !== -1) CLASS_SESSIONS[oldSessionIdx].currentAttendees--;
-    }
-
-    // If switching TO a class, increment new class attendees
-    let room = oldAppt.room;
-    let provider = oldAppt.providerName;
-    let currentAttendees: number | undefined = undefined;
-    let maxCapacity: number | undefined = undefined;
-
-    if (newClassSessionId) {
-        const newSessionIdx = CLASS_SESSIONS.findIndex(cs => cs.id === newClassSessionId);
-        if (newSessionIdx !== -1) {
-            CLASS_SESSIONS[newSessionIdx].currentAttendees++;
-            room = CLASS_SESSIONS[newSessionIdx].room;
-            provider = CLASS_SESSIONS[newSessionIdx].providerName;
-            currentAttendees = CLASS_SESSIONS[newSessionIdx].currentAttendees;
-            maxCapacity = CLASS_SESSIONS[newSessionIdx].maxCapacity;
-        }
-    }
-
-    APPOINTMENTS[index] = {
-        ...oldAppt,
-        startTime: newStart,
-        endTime: newEnd,
-        classSessionId: newClassSessionId,
-        room,
-        providerName: provider,
-        currentAttendees,
-        maxCapacity,
-        status: AppointmentStatus.BOOKED // Reset status to booked if it was something else
-    };
-
-    return APPOINTMENTS[index];
-  },
-
-  createAppointment: async (appt: Partial<Appointment>): Promise<Appointment> => {
-    await delay(400);
-    const newAppt: Appointment = {
-      id: `a${Date.now()}`,
-      status: AppointmentStatus.BOOKED,
-      clientId: appt.clientId!,
-      clientName: appt.clientName || 'Unknown',
-      serviceId: appt.serviceId!,
-      serviceName: appt.serviceName || 'Service',
-      startTime: appt.startTime!,
-      endTime: appt.endTime!,
-      providerName: appt.providerName || 'Staff',
-      classSessionId: appt.classSessionId,
-      maxCapacity: appt.maxCapacity,
-      room: appt.room
-    };
-
-    // If it's a class booking, update the class session attendees count
-    if (appt.classSessionId) {
-      const sessionIndex = CLASS_SESSIONS.findIndex(cs => cs.id === appt.classSessionId);
-      if (sessionIndex !== -1) {
-        CLASS_SESSIONS[sessionIndex].currentAttendees += 1;
-        newAppt.currentAttendees = CLASS_SESSIONS[sessionIndex].currentAttendees;
-        newAppt.maxCapacity = CLASS_SESSIONS[sessionIndex].maxCapacity;
-        newAppt.room = CLASS_SESSIONS[sessionIndex].room;
-      }
-    }
-
-    APPOINTMENTS.push(newAppt);
-    return newAppt;
-  },
-
-  // --- CLIENTS ---
-
-  getClients: async (): Promise<Client[]> => {
-    await delay(300);
-    return [...CLIENTS];
-  },
-
-  getClientById: async (id: string): Promise<Client | undefined> => {
-    return CLIENTS.find(c => c.id === id);
+  updateProviderServices: async (providerId: string, serviceIds: string[]): Promise<void> => {
+    await delay(150);
+    SERVICES = SERVICES.map(svc => {
+      const hasProv = svc.providerIds.includes(providerId);
+      const shouldHaveProv = serviceIds.includes(svc.id);
+      if (shouldHaveProv && !hasProv) return { ...svc, providerIds: [...svc.providerIds, providerId] };
+      if (!shouldHaveProv && hasProv) return { ...svc, providerIds: svc.providerIds.filter(id => id !== providerId) };
+      return svc;
+    });
   },
 
   updateClient: async (client: Client): Promise<Client> => {
-    await delay(300);
-    const index = CLIENTS.findIndex(c => c.id === client.id);
-    if (index !== -1) {
-      CLIENTS[index] = client;
-      return client;
+    await delay(100);
+    const idx = CLIENTS.findIndex(c => c.id === client.id);
+    if (idx !== -1) {
+      CLIENTS[idx] = { ...client };
+      return CLIENTS[idx];
     }
     throw new Error("Client not found");
   },
 
-  // --- SERVICES & CLASSES ---
-
-  getServices: async (): Promise<Service[]> => {
+  updateSettings: async (newSettings: BusinessSettings): Promise<BusinessSettings> => {
     await delay(100);
-    return [...SERVICES];
-  },
-
-  createService: async (service: Partial<Service>): Promise<Service> => {
-    await delay(300);
-    const newService: Service = {
-      id: `s${Date.now()}`,
-      name: service.name || 'New Service',
-      durationMinutes: service.durationMinutes || 60,
-      price: service.price || 0,
-      isClass: true, // Defaulting to class for this context
-      capacity: service.capacity || 10
-    };
-    SERVICES.push(newService);
-    return newService;
-  },
-
-  getClassSessions: async (): Promise<ClassSession[]> => {
-    await delay(300);
-    return [...CLASS_SESSIONS].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-  },
-
-  getProviders: async (): Promise<string[]> => {
-    await delay(100);
-    return PROVIDERS;
-  },
-
-  addProvider: async (name: string): Promise<string> => {
-    await delay(200);
-    if (!PROVIDERS.includes(name)) {
-        PROVIDERS.push(name);
-    }
-    return name;
-  },
-
-  createClassSession: async (session: Partial<ClassSession>): Promise<ClassSession> => {
-    await delay(300);
-    const newSession: ClassSession = {
-      id: `cs${Date.now()}`,
-      serviceId: session.serviceId!,
-      serviceName: session.serviceName!,
-      startTime: session.startTime!,
-      durationMinutes: session.durationMinutes!,
-      providerName: session.providerName!,
-      room: session.room || 'Main Room',
-      maxCapacity: session.maxCapacity || 10,
-      currentAttendees: 0,
-      description: session.description
-    };
-    CLASS_SESSIONS.push(newSession);
-    return newSession;
-  },
-
-  // --- PAYMENTS ---
-
-  getTransactions: async (): Promise<Transaction[]> => {
-    await delay(400);
-    return [...TRANSACTIONS].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  },
-
-  getPayouts: async (): Promise<Payout[]> => {
-    await delay(300);
-    return [...PAYOUTS].sort((a, b) => new Date(b.arrivalDate).getTime() - new Date(a.arrivalDate).getTime());
-  },
-
-  // --- SETTINGS ---
-
-  getSettings: async (): Promise<BusinessSettings> => {
-    await delay(100);
-    return { ...SETTINGS };
-  },
-
-  updateSettings: async (settings: Partial<BusinessSettings>): Promise<BusinessSettings> => {
-    await delay(300);
-    SETTINGS = { ...SETTINGS, ...settings };
+    SETTINGS = { ...newSettings };
     return SETTINGS;
+  },
+
+  updateAppointmentStatus: async (id: string, status: AppointmentStatus, notes?: string): Promise<Appointment> => {
+    await delay(100);
+    const idx = APPOINTMENTS.findIndex(a => a.id === id);
+    if (idx === -1) throw new Error("Appointment not found");
+    const audit: AuditLog = { type: 'status_change', at: new Date().toISOString(), by: 'Staff', notes: `Status set to ${status}. ${notes || ''}` };
+    APPOINTMENTS[idx] = { ...APPOINTMENTS[idx], status, auditTrail: [...(APPOINTMENTS[idx].auditTrail || []), audit] };
+    return APPOINTMENTS[idx];
+  },
+
+  cancelAppointment: async (id: string, reason: string): Promise<Appointment> => {
+    await delay(100);
+    const idx = APPOINTMENTS.findIndex(a => a.id === id);
+    if (idx === -1) throw new Error("Appointment not found");
+    const audit: AuditLog = { type: 'cancelled', at: new Date().toISOString(), by: 'Staff', notes: `Reason: ${reason}` };
+    APPOINTMENTS[idx] = { ...APPOINTMENTS[idx], status: AppointmentStatus.CANCELLED, cancelReason: reason, auditTrail: [...(APPOINTMENTS[idx].auditTrail || []), audit] };
+    return APPOINTMENTS[idx];
+  },
+
+  rescheduleAppointment: async (id: string, startTime: string, endTime: string, providerId?: string, providerName?: string, reason?: string): Promise<Appointment> => {
+    await delay(100);
+    const idx = APPOINTMENTS.findIndex(a => a.id === id);
+    if (idx === -1) throw new Error("Appointment not found");
+    const audit: AuditLog = { type: 'rescheduled', at: new Date().toISOString(), by: 'Staff', notes: `New time: ${new Date(startTime).toLocaleString()}. Reason: ${reason || 'N/A'}` };
+    APPOINTMENTS[idx] = { ...APPOINTMENTS[idx], startTime, endTime, providerId: providerId || APPOINTMENTS[idx].providerId, providerName: providerName || APPOINTMENTS[idx].providerName, status: AppointmentStatus.RESCHEDULED, auditTrail: [...(APPOINTMENTS[idx].auditTrail || []), audit] };
+    return APPOINTMENTS[idx];
+  },
+
+  createAppointment: async (appt: Partial<Appointment>): Promise<Appointment> => {
+    const id = `a${Date.now()}`;
+    const newAppt = { 
+      id, status: AppointmentStatus.BOOKED, source: 'MANUAL',
+      auditTrail: [{ type: 'created', at: new Date().toISOString(), by: 'Staff' }],
+      ...appt 
+    } as Appointment;
+    const thread = CONVERSATIONS.find(c => c.clientId === newAppt.clientId);
+    if (thread) {
+      newAppt.threadId = thread.id;
+      thread.linkedAppointmentIds.push(id);
+    }
+    APPOINTMENTS.push(newAppt);
+    return newAppt;
+  },
+
+  createProvider: async (prov: Partial<Provider>): Promise<Provider> => {
+    await delay(100);
+    const newProv: Provider = {
+      id: `p${Date.now()}`, active: true, role: 'DOCTOR', status: 'AVAILABLE', utilization: 0,
+      licenseExpiry: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
+      assignedSpecialtyIds: [], overrideClinicHours: false, avatar: getAvatar(prov.name || 'New'),
+      ...prov
+    } as Provider;
+    PROVIDERS.push(newProv);
+    return newProv;
+  },
+
+  createClient: async (client: Partial<Client>): Promise<Client> => {
+    const newClient = { id: `c${Date.now()}`, name: 'New Patient', totalAppointments: 0, avatar: getAvatar('new'), ...client } as Client;
+    CLIENTS.push(newClient);
+    return newClient;
+  },
+
+  requestPasswordReset: async ({ identifier }: { identifier: string; deliveryMethod: 'email' | 'phone' }): Promise<{ requestId: string }> => {
+    await delay(500);
+    return { requestId: 'req_' + Math.random().toString(36).substr(2, 9) };
+  },
+
+  verifyResetCode: async ({ code }: { requestId: string; code: string; identifier: string }): Promise<{ resetToken: string }> => {
+    await delay(500);
+    if (code === '123456' || code.length === 6) return { resetToken: 'tok_' + Math.random().toString(36).substr(2, 9) };
+    throw new Error("Invalid verification code");
+  },
+
+  updatePassword: async ({ resetToken }: { resetToken: string; newPassword: string }): Promise<void> => {
+    await delay(500);
+    if (!resetToken) throw new Error("Missing reset token");
+    return;
+  },
+
+  // Availability Engine (Service-First Logic)
+  getAvailabilityForDate: async (serviceId: string, dateStr: string): Promise<{
+    providerStats: ProviderAvailability[],
+    slots: TimeSlot[]
+  }> => {
+    await delay(400); // Hospitals handle more complex data intersection
+    const date = new Date(dateStr);
+    const dayKey = getDayKey(date);
+    const service = SERVICES.find(s => s.id === serviceId);
+    if (!service) return { providerStats: [], slots: [] };
+
+    // 1. Filter Providers Authorized for this specific Service
+    const authorizedProviders = PROVIDERS.filter(p => service.providerIds.includes(p.id) && p.active);
+    const allSlotsMap: Record<string, string[]> = {}; 
+
+    const providerStats: ProviderAvailability[] = authorizedProviders.map(p => {
+      const schedule = p.overrideClinicHours && p.workingHours ? p.workingHours[dayKey] : SETTINGS.workingHours[dayKey];
+      if (!schedule.isOpen) return { providerId: p.id, slotsCount: 0, status: 'OFF' };
+
+      let count = 0;
+      const [startH, startM] = schedule.open.split(':').map(Number);
+      const [endH, endM] = schedule.close.split(':').map(Number);
+      
+      const dayStart = new Date(dateStr); dayStart.setHours(startH, startM, 0, 0);
+      const dayEnd = new Date(dateStr); dayEnd.setHours(endH, endM, 0, 0);
+
+      let current = new Date(dayStart);
+      while (current.getTime() + service.durationMinutes * 60000 <= dayEnd.getTime()) {
+        const slotEnd = new Date(current.getTime() + service.durationMinutes * 60000);
+        
+        // 2. Prevent Conflicts (Hard Lock Check)
+        const hasConflict = APPOINTMENTS.some(a => 
+          a.providerId === p.id && 
+          a.status !== AppointmentStatus.CANCELLED &&
+          isOverlapping(current, slotEnd, new Date(a.startTime), new Date(a.endTime))
+        );
+
+        if (!hasConflict) {
+          count++;
+          const timeKey = current.toTimeString().slice(0, 5);
+          if (!allSlotsMap[timeKey]) allSlotsMap[timeKey] = [];
+          allSlotsMap[timeKey].push(p.id);
+        }
+        current = new Date(current.getTime() + SLOT_INTERVAL * 60000);
+      }
+
+      return {
+        providerId: p.id,
+        slotsCount: count,
+        status: count > 5 ? 'AVAILABLE' : count > 0 ? 'LIMITED' : 'OFF'
+      };
+    });
+
+    const slots: TimeSlot[] = Object.keys(allSlotsMap).sort().map(time => ({
+      time,
+      available: true,
+      providers: allSlotsMap[time]
+    }));
+
+    return { providerStats, slots };
   }
 };

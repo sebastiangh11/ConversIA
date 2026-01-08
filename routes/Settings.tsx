@@ -1,541 +1,375 @@
 
 import React, { useEffect, useState } from 'react';
 import { mockApi } from '../services/mockApi';
-import { BusinessSettings, WorkingDay } from '../types';
-import { Save, Store, Clock, Bot, MessageSquare, Smartphone, Zap, CalendarOff, Trash2, Plus, Split, Copy, Sun, Moon, Briefcase, CheckCircle2 } from 'lucide-react';
+import { BusinessSettings, WorkingHours, UserAccount, UserRole } from '../types';
+import { 
+  Save, Store, Clock, Smartphone, Zap, 
+  CalendarOff, Trash2, Plus, ShieldCheck, 
+  Activity, Info, AlertTriangle, Building2,
+  Scale, FileText, SmartphoneIcon, Settings2,
+  Lock, History, Users, Mail, ShieldAlert,
+  ChevronRight, X, UserPlus, Key
+} from 'lucide-react';
+import BusinessHoursEditor from '../components/BusinessHoursEditor';
 
 const Settings: React.FC = () => {
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  
-  // State for new holiday input
   const [newDayOffDate, setNewDayOffDate] = useState('');
   const [newDayOffDesc, setNewDayOffDesc] = useState('');
+  
+  // User Management State
+  const [users, setUsers] = useState<UserAccount[]>([]);
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [newUserFormData, setNewUserFormData] = useState({ name: '', email: '', role: 'RECEPTIONIST' as UserRole });
 
   useEffect(() => {
     mockApi.getSettings().then(setSettings);
+    mockApi.getUserAccounts().then(setUsers);
   }, []);
 
   const handleSave = async () => {
     if (!settings) return;
     setIsSaving(true);
     await mockApi.updateSettings(settings);
-    setTimeout(() => setIsSaving(false), 500);
+    setTimeout(() => setIsSaving(false), 800);
   };
 
-  const updateWorkingDay = (day: keyof BusinessSettings['workingHours'], field: keyof WorkingDay, value: string | boolean) => {
+  const handleHoursChange = (hours: WorkingHours) => {
     if (!settings) return;
-    setSettings({
-      ...settings,
-      workingHours: {
-        ...settings.workingHours,
-        [day]: {
-          ...settings.workingHours[day],
-          [field]: value
-        }
-      }
-    });
-  };
-
-  const copyDayScheduleToAll = (sourceDayKey: keyof BusinessSettings['workingHours']) => {
-    if (!settings) return;
-    const sourceDay = settings.workingHours[sourceDayKey];
-    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
-    
-    const newHours = { ...settings.workingHours };
-    
-    days.forEach(d => {
-        if (d !== sourceDayKey) {
-            newHours[d] = { ...sourceDay };
-        }
-    });
-
-    setSettings({ ...settings, workingHours: newHours });
+    setSettings({ ...settings, workingHours: hours });
   };
 
   const applyPreset = (preset: '9-5' | '10-7' | '8-4') => {
-     if (!settings) return;
-     const newHours = { ...settings.workingHours };
-     const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'] as const;
-     
-     let open = '09:00', close = '17:00';
-     if (preset === '10-7') { open = '10:00'; close = '19:00'; }
-     if (preset === '8-4') { open = '08:00'; close = '16:00'; }
-
-     weekdays.forEach(d => {
-         newHours[d] = {
-             ...newHours[d],
-             isOpen: true,
-             isSplit: false,
-             open,
-             close
-         };
-     });
-     setSettings({ ...settings, workingHours: newHours });
+    if (!settings) return;
+    const newHours = { ...settings.workingHours };
+    const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'] as const;
+    let open = '09:00', close = '17:00';
+    if (preset === '10-7') { open = '10:00'; close = '19:00'; }
+    if (preset === '8-4') { open = '08:00'; close = '16:00'; }
+    weekdays.forEach(d => {
+      newHours[d] = { ...newHours[d], isOpen: true, isSplit: false, open, close };
+    });
+    setSettings({ ...settings, workingHours: newHours });
   };
 
-  const handleAddDayOff = () => {
+  const handleCreateUser = async () => {
+    if (!newUserFormData.name || !newUserFormData.email) return;
+    const newUser = await mockApi.createUserAccount(newUserFormData);
+    setUsers(prev => [...prev, newUser]);
+    setIsAddingUser(false);
+    setNewUserFormData({ name: '', email: '', role: 'RECEPTIONIST' });
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (id === 'u1') return; // Protect main admin
+    await mockApi.deleteUserAccount(id);
+    setUsers(prev => prev.filter(u => u.id !== id));
+  };
+
+  if (!settings) return (
+    <div className="flex items-center justify-center h-full gap-3 text-gray-400">
+        <History className="animate-spin" />
+        <span className="text-[10px] font-black uppercase tracking-widest">Loading Governance Data...</span>
+    </div>
+  );
+
+  return (
+    <div className="p-8 max-w-5xl mx-auto h-[calc(100vh-4rem)] overflow-y-auto bg-gray-50/30 custom-scrollbar space-y-12">
+      
+      {/* Governance Header */}
+      <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-6">
+         <div>
+            <div className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">
+                <ShieldCheck size={12} /> System Administrator
+            </div>
+            <h1 className="text-3xl font-black text-gray-900 tracking-tight">Global Governance</h1>
+            <p className="text-sm text-gray-500 font-medium mt-1">Configure institutional policies, clinical boundaries, and system access.</p>
+         </div>
+         <button 
+            onClick={handleSave} 
+            disabled={isSaving} 
+            className="flex items-center gap-3 px-8 py-3.5 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 font-black text-xs uppercase tracking-widest disabled:opacity-50"
+         >
+            {isSaving ? <Activity size={18} className="animate-spin" /> : <Save size={18} />}
+            {isSaving ? 'Synchronizing...' : 'Commit Policies'}
+         </button>
+      </div>
+      
+      <div className="space-y-10">
+        
+        {/* SECTION 1: INSTITUTIONAL IDENTITY */}
+        <div className="bg-white shadow-sm border border-gray-100 rounded-[2.5rem] overflow-hidden">
+          <div className="px-8 py-6 border-b border-gray-50 bg-gray-50/30 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shadow-inner">
+                    <Building2 size={20} />
+                </div>
+                <div>
+                    <h2 className="text-lg font-black text-gray-900 tracking-tight">Institutional Profile</h2>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Public & Legal Identity</p>
+                </div>
+            </div>
+          </div>
+          <div className="p-8 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Entity Name</label>
+                <input 
+                    type="text" value={settings.name} 
+                    onChange={(e) => setSettings({...settings, name: e.target.value})} 
+                    className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-indigo-600 outline-none text-sm font-bold transition-all shadow-inner" 
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Public WhatsApp Channel</label>
+                <div className="relative group">
+                  <SmartphoneIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-indigo-600 transition-colors" size={18}/>
+                  <input 
+                    type="text" value={settings.whatsappNumber} 
+                    onChange={(e) => setSettings({...settings, whatsappNumber: e.target.value})} 
+                    className="w-full pl-12 pr-5 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-indigo-600 outline-none text-sm font-bold transition-all shadow-inner" 
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Institutional Description</label>
+              <textarea 
+                value={settings.description} 
+                onChange={(e) => setSettings({...settings, description: e.target.value})} 
+                rows={3} 
+                placeholder="Hospital mission statement for patient-facing communications..."
+                className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-indigo-600 outline-none text-sm font-bold transition-all shadow-inner resize-none" 
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 2: CLINICAL OPERATING BASELINE */}
+        <div className="bg-white shadow-sm border border-gray-100 rounded-[2.5rem] overflow-hidden">
+          <div className="px-8 py-6 border-b border-gray-50 bg-gray-50/30 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center shadow-inner">
+                    <Clock size={20} />
+                </div>
+                <div>
+                    <h2 className="text-lg font-black text-gray-900 tracking-tight">Operating Baseline</h2>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Global Master Schedule</p>
+                </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => applyPreset('9-5')} className="text-[9px] font-black uppercase bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:border-indigo-300 transition-all">Shift: 09-17</button>
+              <button onClick={() => applyPreset('8-4')} className="text-[9px] font-black uppercase bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:border-indigo-300 transition-all">Shift: 08-16</button>
+              <button onClick={() => applyPreset('10-7')} className="text-[9px] font-black uppercase bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:border-indigo-300 transition-all">Shift: 10-19</button>
+            </div>
+          </div>
+          <div className="p-8 space-y-8">
+            <div className="bg-amber-50/50 p-6 rounded-[2rem] border border-amber-100 flex gap-4">
+                <Info className="text-amber-600 shrink-0" size={20} />
+                <p className="text-[11px] text-amber-800 font-bold leading-relaxed uppercase">
+                    These hours define the Institutional window. Clinicians in the <span className="underline">Roster</span> can only be available within these bounds unless an override is authorized at the provider level.
+                </p>
+            </div>
+            <BusinessHoursEditor workingHours={settings.workingHours} onChange={handleHoursChange} />
+          </div>
+        </div>
+
+        {/* SECTION 3: THROUGHPUT & CONCURRENCY */}
+        <div className="bg-white shadow-sm border border-gray-100 rounded-[2.5rem] overflow-hidden">
+          <div className="px-8 py-6 border-b border-gray-50 bg-gray-50/30 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner">
+                    <Scale size={20} />
+                </div>
+                <div>
+                    <h2 className="text-lg font-black text-gray-900 tracking-tight">Throughput Governance</h2>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Concurrency & Safety Caps</p>
+                </div>
+            </div>
+          </div>
+          <div className="p-8">
+            <div className="flex items-center justify-between bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100">
+              <div className="max-w-md">
+                <h4 className="text-sm font-black text-indigo-900 uppercase tracking-widest mb-1">Global Encounter Limit</h4>
+                <p className="text-xs text-indigo-700 font-medium leading-relaxed uppercase opacity-70">
+                    The maximum number of concurrent admissions across all clinical departments. This acts as a physical safety cap for facility resources.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 bg-white rounded-2xl border-2 border-indigo-100 p-2 shadow-sm">
+                <button 
+                    className="w-10 h-10 flex items-center justify-center bg-gray-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all font-black text-lg" 
+                    onClick={() => setSettings({...settings, concurrentSlots: Math.max(1, settings.concurrentSlots - 1)})}
+                >
+                    -
+                </button>
+                <span className="font-black text-xl w-8 text-center text-gray-900">{settings.concurrentSlots}</span>
+                <button 
+                    className="w-10 h-10 flex items-center justify-center bg-gray-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all font-black text-lg" 
+                    onClick={() => setSettings({...settings, concurrentSlots: Math.min(100, settings.concurrentSlots + 1)})}
+                >
+                    +
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 4: SYSTEM ACCESS & USER MANAGEMENT */}
+        <div className="bg-white shadow-sm border border-gray-100 rounded-[2.5rem] overflow-hidden">
+          <div className="px-8 py-6 border-b border-gray-50 bg-gray-50/30 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-indigo-950 text-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100">
+                    <Key size={20} />
+                </div>
+                <div>
+                    <h2 className="text-lg font-black text-gray-900 tracking-tight">System Access Control</h2>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">User Management & Permissions</p>
+                </div>
+            </div>
+            <button 
+                onClick={() => setIsAddingUser(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+            >
+                <UserPlus size={16} /> Invite User
+            </button>
+          </div>
+          <div className="p-8">
+            <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-[2rem] flex gap-4 mb-8">
+                <ShieldCheck className="text-indigo-600 shrink-0" size={24} />
+                <div className="space-y-1">
+                    <h4 className="text-xs font-black text-indigo-900 uppercase tracking-widest">Administrative Override</h4>
+                    <p className="text-[11px] text-indigo-700 font-medium leading-relaxed uppercase">
+                        The "Main Branch" account can provision and revoke access for specialized dashboards. Roles determine visibility across Inbox, Roster, and Billing modules.
+                    </p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              {users.map((user) => (
+                <div key={user.id} className="flex items-center justify-between p-5 bg-white border border-gray-100 rounded-2xl hover:border-indigo-100 transition-all group">
+                  <div className="flex items-center gap-4">
+                    <div className="w-11 h-11 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                      <Users size={20} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-black text-gray-900">{user.name}</p>
+                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter ${
+                          user.role === 'ADMIN' ? 'bg-indigo-950 text-white' : 
+                          user.role === 'CLINICIAN' ? 'bg-emerald-50 text-emerald-600' : 
+                          'bg-blue-50 text-blue-600'
+                        }`}>{user.role}</span>
+                      </div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{user.email} • Created {new Date(user.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {user.lastLogin && (
+                        <span className="text-[9px] font-black text-gray-300 uppercase hidden md:block">Last seen: {new Date(user.lastLogin).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    )}
+                    {user.id !== 'u1' && (
+                        <button 
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="p-2.5 text-gray-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                        >
+                            <Trash2 size={18} />
+                        </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div className="pb-10 pt-4 flex items-center justify-center gap-4 text-gray-300">
+          <Settings2 size={16} />
+          <span className="text-[10px] font-black uppercase tracking-[0.4em]">End of Governance Framework</span>
+      </div>
+
+      {/* CREATE USER MODAL */}
+      {isAddingUser && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-indigo-950/20 backdrop-blur-md" onClick={() => setIsAddingUser(false)} />
+              <div className="relative z-50 w-full max-w-md bg-white rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center mb-8">
+                    <h3 className="text-xl font-black text-gray-900 tracking-tight">Provision System User</h3>
+                    <button onClick={() => setIsAddingUser(false)} className="text-gray-400 hover:text-gray-900"><X size={20} /></button>
+                  </div>
+                  
+                  <div className="space-y-6">
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Legal Name</label>
+                          <div className="relative group">
+                            <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-indigo-600 transition-colors" size={18} />
+                            <input 
+                                type="text" value={newUserFormData.name} 
+                                onChange={(e) => setNewUserFormData({...newUserFormData, name: e.target.value})} 
+                                className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-indigo-600 outline-none text-sm font-bold transition-all"
+                                placeholder="e.g. John Smith"
+                            />
+                          </div>
+                      </div>
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
+                          <div className="relative group">
+                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-indigo-600 transition-colors" size={18} />
+                            <input 
+                                type="email" value={newUserFormData.email} 
+                                onChange={(e) => setNewUserFormData({...newUserFormData, email: e.target.value})} 
+                                className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-indigo-600 outline-none text-sm font-bold transition-all"
+                                placeholder="john@conversia.io"
+                            />
+                          </div>
+                      </div>
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">System Access Level</label>
+                          <select 
+                              value={newUserFormData.role} 
+                              onChange={(e) => setNewUserFormData({...newUserFormData, role: e.target.value as UserRole})}
+                              className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-indigo-600 outline-none text-sm font-bold appearance-none cursor-pointer"
+                          >
+                              <option value="RECEPTIONIST">Front Desk / Receptionist</option>
+                              <option value="CLINICIAN">Clinician / Physician</option>
+                              <option value="ADMIN">System Administrator</option>
+                          </select>
+                      </div>
+                      
+                      <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex gap-3">
+                          <ShieldAlert className="text-amber-600 shrink-0" size={18} />
+                          <p className="text-[10px] text-amber-800 font-medium leading-relaxed uppercase">Temporary login credentials will be dispatched to the provided email address upon confirmation.</p>
+                      </div>
+                  </div>
+                  
+                  <div className="flex flex-col gap-3 mt-10">
+                      <button onClick={handleCreateUser} className="w-full py-5 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 active:scale-[0.98] hover:bg-indigo-700 transition-all">Authorize User Account</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+    </div>
+  );
+
+  function handleAddDayOff() {
     if (!settings || !newDayOffDate) return;
     const updatedDaysOff = [
       ...(settings.daysOff || []),
-      { date: newDayOffDate, description: newDayOffDesc || 'Closed' }
+      { date: newDayOffDate, description: newDayOffDesc || 'Institutional Closure' }
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
     setSettings({ ...settings, daysOff: updatedDaysOff });
     setNewDayOffDate('');
     setNewDayOffDesc('');
-  };
+  }
 
-  const handleRemoveDayOff = (indexToRemove: number) => {
+  function handleRemoveDayOff(indexToRemove: number) {
     if (!settings || !settings.daysOff) return;
     const updatedDaysOff = settings.daysOff.filter((_, idx) => idx !== indexToRemove);
     setSettings({ ...settings, daysOff: updatedDaysOff });
-  };
-
-  // Helper: Calculate Duration in Hours
-  const getDuration = (day: WorkingDay): number => {
-    if (!day.isOpen) return 0;
-    const toMinutes = (s: string) => {
-        const [h, m] = s.split(':').map(Number);
-        return h * 60 + m;
-    };
-    let mins = toMinutes(day.close) - toMinutes(day.open);
-    if (day.isSplit && day.open2 && day.close2) {
-        mins += toMinutes(day.close2) - toMinutes(day.open2);
-    }
-    return Math.max(0, Math.round((mins / 60) * 10) / 10);
-  };
-
-  // Helper to render the visual timeline bar
-  const renderTimeBar = (dayConfig: WorkingDay) => {
-    const getPercent = (timeStr: string) => {
-        if (!timeStr) return 0;
-        const [h, m] = timeStr.split(':').map(Number);
-        return ((h * 60 + m) / 1440) * 100;
-    };
-
-    if (!dayConfig.isOpen) {
-        return (
-            <div className="h-3 w-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] bg-gray-100 rounded-full opacity-50 border border-gray-200" title="Closed"></div>
-        );
-    }
-
-    const start1 = getPercent(dayConfig.open);
-    const end1 = getPercent(dayConfig.close);
-    const width1 = Math.max(0, end1 - start1);
-
-    let start2 = 0; 
-    let width2 = 0;
-    
-    if (dayConfig.isSplit && dayConfig.open2 && dayConfig.close2) {
-        start2 = getPercent(dayConfig.open2);
-        width2 = Math.max(0, getPercent(dayConfig.close2) - start2);
-    }
-
-    return (
-        <div className="h-3 w-full bg-gray-100 rounded-full relative overflow-hidden border border-gray-200">
-            {/* Markers for 6am, 12pm, 6pm */}
-            <div className="absolute top-0 bottom-0 left-[25%] w-px bg-gray-300/30 z-10"></div>
-            <div className="absolute top-0 bottom-0 left-[50%] w-px bg-gray-300/30 z-10"></div>
-            <div className="absolute top-0 bottom-0 left-[75%] w-px bg-gray-300/30 z-10"></div>
-
-            <div 
-                className="absolute top-0 bottom-0 bg-indigo-500 rounded-full opacity-90 hover:opacity-100 transition-opacity" 
-                style={{ left: `${start1}%`, width: `${width1}%` }}
-                title={`Open: ${dayConfig.open} - ${dayConfig.close}`}
-            ></div>
-            
-            {dayConfig.isSplit && (
-                 <div 
-                 className="absolute top-0 bottom-0 bg-indigo-400 rounded-full opacity-90 hover:opacity-100 transition-opacity" 
-                 style={{ left: `${start2}%`, width: `${width2}%` }}
-                 title={`Open: ${dayConfig.open2} - ${dayConfig.close2}`}
-             ></div>
-            )}
-        </div>
-    );
-  };
-
-  if (!settings) return <div className="p-6">Loading settings...</div>;
-
-  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
-
-  return (
-    <div className="p-8 max-w-5xl mx-auto h-[calc(100vh-4rem)] overflow-y-auto bg-gray-50/50">
-      <div className="flex justify-between items-center mb-8">
-         <div>
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Business Settings</h1>
-            <p className="text-sm text-gray-500 mt-1">Configure your profile, operations, and AI assistant.</p>
-         </div>
-         <button 
-            onClick={handleSave}
-            disabled={isSaving}
-            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-70 transition-all shadow-lg shadow-indigo-200 font-bold"
-          >
-            <Save size={18} />
-            {isSaving ? 'Saving...' : 'Save Changes'}
-          </button>
-      </div>
-      
-      <div className="space-y-8">
-        
-        {/* Business Profile Card */}
-        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-50 bg-gray-50/50 flex items-center gap-3">
-            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                <Store size={20} />
-            </div>
-            <h2 className="text-lg font-bold text-gray-900">Business Profile</h2>
-          </div>
-          
-          <div className="p-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Business Name</label>
-                    <input 
-                    type="text" 
-                    value={settings.name}
-                    onChange={(e) => setSettings({...settings, name: e.target.value})}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white text-gray-900 transition-shadow"
-                    />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">WhatsApp Number</label>
-                    <div className="relative">
-                        <input 
-                        type="text" 
-                        value={settings.whatsappNumber}
-                        onChange={(e) => setSettings({...settings, whatsappNumber: e.target.value})}
-                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white text-gray-900 transition-shadow"
-                        />
-                        <Smartphone className="absolute left-3 top-3.5 text-gray-400" size={18}/>
-                    </div>
-                </div>
-            </div>
-
-            <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Business Description</label>
-                <textarea 
-                    value={settings.description}
-                    onChange={(e) => setSettings({...settings, description: e.target.value})}
-                    rows={3}
-                    placeholder="Describe your business for the AI..."
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white text-gray-900 resize-none"
-                />
-                <p className="text-xs text-gray-400 mt-2">This description helps the AI understand your services and value proposition.</p>
-            </div>
-
-            <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Timezone</label>
-                <select 
-                value={settings.timezone}
-                onChange={(e) => setSettings({...settings, timezone: e.target.value})}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white text-gray-900"
-                >
-                <option value="America/New_York">Eastern Time (US & Canada)</option>
-                <option value="America/Los_Angeles">Pacific Time (US & Canada)</option>
-                <option value="Europe/London">London</option>
-                <option value="Europe/Paris">Paris</option>
-                </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Operations Card */}
-        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-50 bg-gray-50/50 flex items-center justify-between">
-             <div className="flex items-center gap-3">
-                <div className="p-2 bg-orange-100 text-orange-600 rounded-lg">
-                    <Clock size={20} />
-                </div>
-                <h2 className="text-lg font-bold text-gray-900">Working Hours</h2>
-             </div>
-             
-             {/* Quick Sets */}
-             <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-400 uppercase mr-2 hidden sm:inline">Quick Sets (M-F):</span>
-                <button onClick={() => applyPreset('9-5')} className="text-xs bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-50 text-gray-600 font-medium">9-5</button>
-                <button onClick={() => applyPreset('8-4')} className="text-xs bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-50 text-gray-600 font-medium">8-4</button>
-                <button onClick={() => applyPreset('10-7')} className="text-xs bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-50 text-gray-600 font-medium">10-7</button>
-             </div>
-          </div>
-          
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-8 bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-                 <div>
-                    <label className="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">Simultaneous Bookings</label>
-                    <p className="text-xs text-indigo-700">How many appointments can happen at once?</p>
-                 </div>
-                 <div className="flex items-center gap-2 bg-white rounded-lg border border-indigo-200 px-2">
-                    <button 
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-md font-bold"
-                        onClick={() => setSettings({...settings, concurrentSlots: Math.max(1, settings.concurrentSlots - 1)})}
-                    >-</button>
-                    <span className="font-bold w-6 text-center text-indigo-900">{settings.concurrentSlots}</span>
-                    <button 
-                         className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-md font-bold"
-                         onClick={() => setSettings({...settings, concurrentSlots: Math.min(20, settings.concurrentSlots + 1)})}
-                    >+</button>
-                 </div>
-            </div>
-
-            {/* Timeline Header Ruler */}
-            <div className="hidden lg:flex items-center gap-4 px-4 pb-2 border-b border-gray-100 mb-4 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-                <div className="w-28 shrink-0">Day</div>
-                <div className="flex-1 relative h-4">
-                    <span className="absolute left-0 transform -translate-x-1/2">00:00</span>
-                    <span className="absolute left-[25%] transform -translate-x-1/2">06:00</span>
-                    <span className="absolute left-[50%] transform -translate-x-1/2">12:00</span>
-                    <span className="absolute left-[75%] transform -translate-x-1/2">18:00</span>
-                    <span className="absolute right-0 transform translate-x-1/2">24:00</span>
-                </div>
-                <div className="w-[300px] shrink-0 text-center">Schedule</div>
-            </div>
-
-            <div className="space-y-3">
-              {days.map(day => {
-                const duration = getDuration(settings.workingHours[day]);
-                return (
-                <div key={day} className="group">
-                  <div className={`flex flex-col lg:flex-row lg:items-center gap-4 p-3 rounded-xl border transition-all ${
-                      settings.workingHours[day].isOpen 
-                      ? 'bg-white border-gray-100 hover:border-indigo-200 hover:shadow-sm' 
-                      : 'bg-gray-50 border-transparent'
-                  }`}>
-                    
-                    {/* Day Toggle & Name */}
-                    <div className="flex items-center gap-3 w-28 shrink-0">
-                        <button 
-                            onClick={() => updateWorkingDay(day, 'isOpen', !settings.workingHours[day].isOpen)}
-                            className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${settings.workingHours[day].isOpen ? 'bg-indigo-600' : 'bg-gray-300'}`}
-                        >
-                            <span className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full transition-transform shadow-sm ${settings.workingHours[day].isOpen ? 'translate-x-4' : ''}`} />
-                        </button>
-                        <div className="flex flex-col">
-                            <span className="capitalize text-sm font-bold text-gray-800">{day.slice(0,3)}</span>
-                            {settings.workingHours[day].isOpen && (
-                                <span className="text-[10px] text-gray-400 font-medium">{duration}h</span>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Visual Bar (Desktop) */}
-                    <div className="hidden lg:block flex-1 mx-2">
-                        {renderTimeBar(settings.workingHours[day])}
-                    </div>
-
-                    {/* Inputs */}
-                    <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center w-[300px] justify-end">
-                        {settings.workingHours[day].isOpen ? (
-                             <div className="flex flex-col gap-2 w-full">
-                                <div className="flex items-center gap-2 justify-end">
-                                    <input 
-                                        type="time" 
-                                        value={settings.workingHours[day].open}
-                                        onChange={(e) => updateWorkingDay(day, 'open', e.target.value)}
-                                        className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-gray-50 text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none font-medium w-20 text-center"
-                                    />
-                                    <span className="text-gray-300 text-[10px] font-bold">-</span>
-                                    <input 
-                                        type="time" 
-                                        value={settings.workingHours[day].close}
-                                        onChange={(e) => updateWorkingDay(day, 'close', e.target.value)}
-                                        className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-gray-50 text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none font-medium w-20 text-center"
-                                    />
-                                </div>
-                                
-                                {settings.workingHours[day].isSplit && (
-                                     <div className="flex items-center gap-2 justify-end animate-in slide-in-from-top-1">
-                                        <input 
-                                            type="time" 
-                                            value={settings.workingHours[day].open2 || "18:00"}
-                                            onChange={(e) => updateWorkingDay(day, 'open2', e.target.value)}
-                                            className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-gray-50 text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none font-medium w-20 text-center"
-                                        />
-                                        <span className="text-gray-300 text-[10px] font-bold">-</span>
-                                        <input 
-                                            type="time" 
-                                            value={settings.workingHours[day].close2 || "21:00"}
-                                            onChange={(e) => updateWorkingDay(day, 'close2', e.target.value)}
-                                            className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-gray-50 text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none font-medium w-20 text-center"
-                                        />
-                                     </div>
-                                )}
-                             </div>
-                        ) : (
-                            <span className="text-xs text-gray-400 font-medium italic px-4 w-full text-center">Closed</span>
-                        )}
-
-                        {/* Actions */}
-                         {settings.workingHours[day].isOpen && (
-                            <div className="flex gap-1">
-                                <button 
-                                    onClick={() => updateWorkingDay(day, 'isSplit', !settings.workingHours[day].isSplit)}
-                                    className={`p-1.5 rounded-lg transition-colors ${settings.workingHours[day].isSplit ? 'bg-indigo-100 text-indigo-600' : 'text-gray-300 hover:bg-gray-100 hover:text-gray-600'}`}
-                                    title={settings.workingHours[day].isSplit ? "Remove Split Shift" : "Add Split Shift"}
-                                >
-                                    <Split size={14} className={settings.workingHours[day].isSplit ? "" : "rotate-90"} />
-                                </button>
-                                <button 
-                                    onClick={() => copyDayScheduleToAll(day)}
-                                    className="p-1.5 rounded-lg text-gray-300 hover:bg-gray-100 hover:text-indigo-600 transition-colors"
-                                    title={`Copy ${day}'s schedule to all other days`}
-                                >
-                                    <Copy size={14} />
-                                </button>
-                            </div>
-                         )}
-                    </div>
-
-                  </div>
-                </div>
-              );
-              })}
-            </div>
-            
-            <div className="mt-6 flex justify-end">
-                <p className="text-xs text-gray-400 italic">
-                    * Total Weekly Hours: {days.reduce((acc, d) => acc + getDuration(settings.workingHours[d]), 0)}h
-                </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Holidays & Time Off Card */}
-        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-50 bg-gray-50/50 flex items-center gap-3">
-             <div className="p-2 bg-red-100 text-red-600 rounded-lg">
-                <CalendarOff size={20} />
-            </div>
-            <div>
-                <h2 className="text-lg font-bold text-gray-900">Holidays & Time Off</h2>
-                <p className="text-xs text-red-500 font-medium">Business will be marked as closed on these dates</p>
-            </div>
-          </div>
-
-          <div className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4 mb-6 p-4 bg-gray-50 rounded-xl border border-gray-100 items-end">
-                <div className="flex-1 w-full">
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Date</label>
-                    <input 
-                        type="date" 
-                        value={newDayOffDate}
-                        onChange={(e) => setNewDayOffDate(e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                </div>
-                <div className="flex-[2] w-full">
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Reason (Optional)</label>
-                    <input 
-                        type="text" 
-                        value={newDayOffDesc}
-                        onChange={(e) => setNewDayOffDesc(e.target.value)}
-                        placeholder="e.g. Christmas, Family Vacation"
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                </div>
-                <button 
-                    onClick={handleAddDayOff}
-                    disabled={!newDayOffDate}
-                    className="w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 h-[38px]"
-                >
-                    <Plus size={16} /> Add
-                </button>
-            </div>
-
-            <div className="space-y-2">
-                {(!settings.daysOff || settings.daysOff.length === 0) ? (
-                    <p className="text-center text-sm text-gray-400 py-4 italic">No days off configured.</p>
-                ) : (
-                    settings.daysOff.map((day, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors group">
-                             <div className="flex items-center gap-4">
-                                <div className="bg-red-50 text-red-500 font-bold px-3 py-1 rounded-lg text-xs">
-                                    {new Date(day.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                                </div>
-                                <span className="text-sm font-medium text-gray-700">{day.description}</span>
-                             </div>
-                             <button 
-                                onClick={() => handleRemoveDayOff(idx)}
-                                className="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"
-                            >
-                                <Trash2 size={16} />
-                             </button>
-                        </div>
-                    ))
-                )}
-            </div>
-          </div>
-        </div>
-
-        {/* AI Configuration Card */}
-        <div className="bg-white shadow-sm border border-indigo-100 rounded-2xl overflow-hidden ring-1 ring-indigo-50">
-          <div className="px-6 py-4 border-b border-indigo-50 bg-indigo-50/30 flex items-center gap-3">
-             <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-                <Bot size={20} />
-            </div>
-            <div>
-                <h2 className="text-lg font-bold text-gray-900">ConversIA Agent</h2>
-                <p className="text-xs text-indigo-500 font-medium">Configure how the AI interacts with your customers</p>
-            </div>
-          </div>
-          
-          <div className="p-6 space-y-6">
-             <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <Zap size={14} className="text-yellow-500"/> System Prompt (Instructions)
-                </label>
-                <div className="relative">
-                    <textarea 
-                        value={settings.aiPrompt}
-                        onChange={(e) => setSettings({...settings, aiPrompt: e.target.value})}
-                        rows={8}
-                        className="w-full px-5 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-gray-50 text-gray-800 font-mono text-sm leading-relaxed"
-                    />
-                    <div className="absolute top-2 right-2 p-1 bg-white rounded-lg border border-gray-100 shadow-sm opacity-50 hover:opacity-100 cursor-pointer" title="Reset to default">
-                        <MessageSquare size={16} className="text-gray-500"/>
-                    </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                    These instructions tell the AI how to behave, what tone to use, and specific rules to follow when chatting with customers on WhatsApp.
-                </p>
-             </div>
-
-             <div className="border-t border-gray-100 pt-6">
-                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-4">Notifications & Reminders</h3>
-                <div className="space-y-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-bold text-gray-800 text-sm">24-hour Reminder</p>
-                            <p className="text-xs text-gray-500">Send WhatsApp reminder 1 day before.</p>
-                        </div>
-                        <button 
-                        onClick={() => setSettings({...settings, reminder24h: !settings.reminder24h})}
-                        className={`w-11 h-6 rounded-full transition-colors relative ${settings.reminder24h ? 'bg-indigo-600' : 'bg-gray-300'}`}
-                        >
-                        <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${settings.reminder24h ? 'translate-x-5' : ''}`} />
-                        </button>
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="font-bold text-gray-800 text-sm">1-hour Reminder</p>
-                            <p className="text-xs text-gray-500">Send urgent reminder 1 hour before.</p>
-                        </div>
-                        <button 
-                        onClick={() => setSettings({...settings, reminder1h: !settings.reminder1h})}
-                        className={`w-11 h-6 rounded-full transition-colors relative ${settings.reminder1h ? 'bg-indigo-600' : 'bg-gray-300'}`}
-                        >
-                        <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${settings.reminder1h ? 'translate-x-5' : ''}`} />
-                        </button>
-                    </div>
-                </div>
-             </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
+  }
 };
 
 export default Settings;

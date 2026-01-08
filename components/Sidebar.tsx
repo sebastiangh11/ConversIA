@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { MessageSquare, Calendar, Users, Settings, Layers, LogOut, Home, CreditCard, Sparkles } from 'lucide-react';
+import { MessageSquare, Calendar, Users, Settings, Layers, LogOut, Home as HomeIcon, CreditCard, Sparkles } from 'lucide-react';
 
 interface SidebarProps {
   onLogout?: () => void;
@@ -12,12 +12,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onLogout, user }) => {
   const location = useLocation();
 
   const navItems = [
-    { name: 'Dashboard', path: '/', icon: <Home size={18} /> },
+    { name: 'Home', path: '/', icon: <HomeIcon size={18} /> },
     { name: 'Inbox', path: '/inbox', icon: <MessageSquare size={18} /> },
     { name: 'Appointments', path: '/appointments', icon: <Calendar size={18} /> },
-    { name: 'Classes', path: '/classes', icon: <Layers size={18} /> },
-    { name: 'Clients', path: '/clients', icon: <Users size={18} /> },
-    { name: 'Payments', path: '/payments', icon: <CreditCard size={18} /> },
+    { name: 'Specialties', path: '/classes', icon: <Layers size={18} /> },
+    { name: 'Patients', path: '/clients', icon: <Users size={18} /> },
+    { name: 'Billing', path: '/payments', icon: <CreditCard size={18} /> },
     { name: 'Settings', path: '/settings', icon: <Settings size={18} /> },
   ];
 
@@ -36,7 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onLogout, user }) => {
       </div>
       
       <nav className="flex-1 px-4 space-y-1">
-        <p className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-4">Main Menu</p>
+        <p className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-4">Clinic Hub</p>
         {navItems.map((item) => {
           const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
           const isExactActive = item.path === '/' ? location.pathname === '/' : isActive;
@@ -66,10 +66,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onLogout, user }) => {
           <div className="absolute -right-4 -bottom-4 opacity-10 transform group-hover:scale-110 transition-transform">
              <Sparkles size={80} className="text-indigo-600" />
           </div>
-          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-wider mb-1">Pro Plan</p>
-          <p className="text-xs text-indigo-900 font-bold mb-3 leading-tight">Your business is growing fast!</p>
+          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-wider mb-1">Clinical Pro</p>
+          <p className="text-xs text-indigo-900 font-bold mb-3 leading-tight">Patient volume is increasing!</p>
           <button className="w-full py-2 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-lg shadow-sm hover:bg-indigo-700 transition-colors">
-            Manage Subscription
+            Account Management
           </button>
         </div>
 
@@ -83,7 +83,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onLogout, user }) => {
             className="w-10 h-10 rounded-full border-2 border-white shadow-md grayscale group-hover:grayscale-0 transition-all"
           />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-gray-800 truncate leading-none mb-1">{user?.name?.split(' ')[0] || 'Owner'}</p>
+            <p className="text-sm font-bold text-gray-800 truncate leading-none mb-1">{user?.name?.split(' ')[0] || 'Doctor'}</p>
             <p className="text-[10px] text-gray-400 truncate font-medium">Log out</p>
           </div>
           <LogOut size={16} className="text-gray-400 group-hover:text-red-500 transition-colors" />
@@ -94,4 +94,3 @@ const Sidebar: React.FC<SidebarProps> = ({ onLogout, user }) => {
 };
 
 export default Sidebar;
-    

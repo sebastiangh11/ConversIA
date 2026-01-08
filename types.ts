@@ -1,16 +1,58 @@
 
 export enum AppointmentStatus {
   BOOKED = 'BOOKED',
+  CONFIRMED = 'CONFIRMED',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
   NO_SHOW = 'NO_SHOW',
-  PENDING = 'PENDING'
+  PENDING = 'PENDING',
+  RESCHEDULED = 'RESCHEDULED'
 }
 
 export enum MessageSender {
   CLIENT = 'CLIENT',
-  BUSINESS = 'BUSINESS', // Bot or Human
+  BUSINESS = 'BUSINESS', 
   SYSTEM = 'SYSTEM'
+}
+
+export type ConvStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'ESCALATED';
+export type StaffRole = 'NONE' | 'DOCTOR' | 'NURSE' | 'FRONT_DESK';
+export type UserRole = 'ADMIN' | 'CLINICIAN' | 'RECEPTIONIST';
+
+export interface UserAccount {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  createdAt: string;
+  lastLogin?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface InternalNote {
+  id: string;
+  text: string;
+  timestamp: string;
+  author: string;
+}
+
+export interface WorkingDay {
+  open: string; 
+  close: string; 
+  isOpen: boolean;
+  isSplit?: boolean; 
+  open2?: string; 
+  close2?: string; 
+}
+
+export interface WorkingHours {
+  monday: WorkingDay;
+  tuesday: WorkingDay;
+  wednesday: WorkingDay;
+  thursday: WorkingDay;
+  friday: WorkingDay;
+  saturday: WorkingDay;
+  sunday: WorkingDay;
 }
 
 export interface Client {
@@ -27,88 +69,62 @@ export interface Client {
   preferredContactMethod?: 'WHATSAPP' | 'PHONE' | 'EMAIL';
 }
 
+export interface Specialty {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface Provider {
+  id: string;
+  name: string;
+  role: 'DOCTOR' | 'NURSE';
+  active: boolean;
+  status: 'AVAILABLE' | 'IN_CONSULT' | 'ON_BREAK' | 'OFF_DUTY'; // Live operational status
+  avatar?: string;
+  overrideClinicHours: boolean;
+  workingHours?: WorkingHours;
+  utilization: number; // 0 to 100
+  licenseExpiry: string; // ISO date for compliance tracking
+  assignedSpecialtyIds: string[]; // Many-to-many relationship
+}
+
 export interface Service {
   id: string;
   name: string;
   durationMinutes: number;
   price: number;
-  isClass: boolean; // Multi-slot
+  specialtyId: string;
+  providerIds: string[]; 
+  isClass: boolean; 
   capacity?: number;
 }
 
-export interface ClassSession {
-  id: string;
-  serviceId: string;
-  serviceName: string;
-  startTime: string;
-  durationMinutes: number;
-  providerName: string;
-  room: string;
-  maxCapacity: number;
-  currentAttendees: number;
-  description?: string;
+export interface AuditLog {
+  type: 'rescheduled' | 'cancelled' | 'status_change' | 'created' | 'reminder_sent';
+  at: string;
+  by: string;
+  notes?: string;
+  reason?: string;
 }
 
 export interface Appointment {
   id: string;
   clientId: string;
-  clientName: string; // Denormalized for ease
+  clientName: string;
   serviceId: string;
   serviceName: string;
-  classSessionId?: string; // Link to specific class slot
-  startTime: string; // ISO String
-  endTime: string; // ISO String
+  providerId: string; 
   providerName: string;
+  classSessionId?: string; 
+  startTime: string; 
+  endTime: string; 
   room?: string;
   status: AppointmentStatus;
-  currentAttendees?: number; // For classes (snapshot or denormalized)
-  maxCapacity?: number; // For classes
-  notes?: string;
-}
-
-export interface Message {
-  id: string;
-  conversationId: string;
-  text: string;
-  sender: MessageSender;
-  timestamp: string;
-  isRead: boolean;
-}
-
-export interface Conversation {
-  id: string;
-  clientId: string;
-  clientName: string;
-  clientPhone: string;
-  lastMessageText: string;
-  lastMessageTime: string;
-  unreadCount: number;
-  status: 'NEW' | 'ACTIVE' | 'ARCHIVED';
-  relatedAppointmentId?: string; // Link to the active appointment being discussed
-}
-
-export interface WorkingDay {
-  open: string; // "09:00"
-  close: string; // "17:00"
-  isOpen: boolean;
-  isSplit?: boolean; // Toggle for split shift
-  open2?: string; // "18:00"
-  close2?: string; // "21:00"
-}
-
-export interface WorkingHours {
-  monday: WorkingDay;
-  tuesday: WorkingDay;
-  wednesday: WorkingDay;
-  thursday: WorkingDay;
-  friday: WorkingDay;
-  saturday: WorkingDay;
-  sunday: WorkingDay;
-}
-
-export interface DayOff {
-  date: string; // YYYY-MM-DD
-  description: string;
+  source: 'AI' | 'MANUAL';
+  threadId?: string; // Link to conversation
+  auditTrail?: AuditLog[];
+  cancelReason?: string;
 }
 
 export interface BusinessSettings {
@@ -119,29 +135,40 @@ export interface BusinessSettings {
   reminder24h: boolean;
   reminder1h: boolean;
   workingHours: WorkingHours;
-  daysOff: DayOff[];
-  concurrentSlots: number; // How many simultaneous appointments (non-class)
-  aiPrompt: string; // System instruction for the bot
+  daysOff: { date: string; description: string }[];
+  concurrentSlots: number; 
+  aiPrompt: string; 
 }
 
-export interface Transaction {
-  id: string;
-  clientId: string;
-  clientName: string;
-  serviceId: string;
-  serviceName: string;
-  amount: number;
-  currency: string;
-  status: 'PAID' | 'PENDING' | 'REFUNDED';
-  date: string;
-  stripeTransactionId: string;
-  paymentMethod: 'CARD' | 'WALLET' | 'OTHER';
+export interface ProviderAvailability {
+  providerId: string;
+  slotsCount: number;
+  status: 'AVAILABLE' | 'LIMITED' | 'OFF';
 }
 
-export interface Payout {
-  id: string;
-  amount: number;
-  status: 'COMPLETED' | 'PENDING' | 'SCHEDULED';
-  arrivalDate: string;
-  bankName: string;
+export interface TimeSlot {
+  time: string;
+  available: boolean;
+  providers: string[]; // IDs of providers available at this time
 }
+
+// Legacy/Context types
+export interface Message { id: string; conversationId: string; text: string; sender: MessageSender; timestamp: string; isRead: boolean; isBot?: boolean; }
+export interface Conversation { 
+  id: string; 
+  clientId: string; 
+  clientName: string; 
+  clientPhone: string; 
+  lastMessageText: string; 
+  lastMessageTime: string; 
+  unreadCount: number; 
+  status: ConvStatus; 
+  assignedTo: StaffRole; 
+  tags: string[]; 
+  internalNotes: InternalNote[];
+  linkedAppointmentIds: string[]; // Track clinical link
+}
+
+export interface Transaction { id: string; clientId: string; clientName: string; serviceId: string; serviceName: string; amount: number; currency: string; status: 'PAID' | 'PENDING'; date: string; stripeTransactionId: string; paymentMethod: 'CARD' | 'WALLET'; }
+export interface Payout { id: string; amount: number; status: 'COMPLETED' | 'PENDING'; arrivalDate: string; bankName: string; }
+export interface ClassSession { id: string; serviceId: string; serviceName: string; startTime: string; durationMinutes: number; providerName: string; room: string; maxCapacity: number; currentAttendees: number; }
